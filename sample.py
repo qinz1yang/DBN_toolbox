@@ -1,5 +1,5 @@
 from pgmpy.models import DynamicBayesianNetwork as DBN
-from DBN_toolboxes import qzy
+from DBN_toolbox import qzy
 
 dbn = DBN()
 dbn.add_edges_from([
