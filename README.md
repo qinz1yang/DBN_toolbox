@@ -1,8 +1,9 @@
-# DAIL
+# DAIL_toolbox
 An encapsulated Python toolbox for training and evaluating the (Dynamic) Bayesian Network. It is designed for the research purposes in Cornell Design and Augmented Intelligence Lab(DAIL).
 
 This class can be called using "from DBN_toolboxes import qzy", and then calling arguments like "qzy.DBN_train()"
-Contains functions:
+
+## Contains functions:
 
 {
 
@@ -18,7 +19,8 @@ DBN_acc(network, test_data_name = "test_data.csv", model_name = "trained_model.p
 
 }
 
-* DBN_evaluate() will generate a html evaluation report containing confusion matrix and other statistics about the model(model_evaluation_results.html). DBN_acc will return the accuracy of the model only.
+* DBN_evaluate() will generate a html evaluation report containing confusion matrix and other statistics about the model(model_evaluation_results.html).
+* DBN_acc will return the accuracy of the model only.
 
 NOTE THAT this toolbox has designated way of dealing with data that only fits the research purposes of Cornell DAIL. You are free to edit the code to fit your data structures.
 
