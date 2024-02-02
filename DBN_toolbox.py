@@ -76,7 +76,7 @@ class qzy():
         data['uncertain'] = pd.cut(data['uncertain'], bins=[0, 0.52646873, 1.05293746], labels=[0, 1], right=False)
         data['Num_intersection'] = pd.cut(data['Num_intersection'], bins=[0, 2, 5, 6], labels=[0, 1, 2], right=True)
         if (shuffled == True):
-
+            np.random.seed(seed)
             groups = [df for _, df in data.groupby('participant')]
             np.random.shuffle(groups)
             shuffled_data = pd.concat(groups).reset_index(drop=True)
@@ -98,7 +98,6 @@ class qzy():
             # data_t1 = train_data.shift(-1).rename(columns={col: (col, 1) for col in train_data.columns})
             # complete_data = pd.concat([data_t0, data_t1], axis=1).dropna()
         else:
-            np.random.seed(seed)
             shuffled_data = data
             split_index = int(len(shuffled_data) * 0.8)
             train_data = shuffled_data[:split_index]
