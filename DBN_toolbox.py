@@ -1,6 +1,6 @@
-# v1.1
-# 2024.2.2, Friday
-# Ithaca, Cloudy
+# v1.2
+# 2024.2.7, Wed
+# Ithaca, Sunny
 
 # train
 import pandas as pd
@@ -30,6 +30,12 @@ class qzy():
     def plot_confusion_matrix(y_true, y_pred, classes, title='Confusion Matrix', cmap=plt.cm.Blues):
         """
         Method to plot confusion matrix
+        Parameters:
+        - true values
+        - predictions
+        - classes
+        - title, default = 'Confusion Matrix'
+        - cmap, default = plt.cm.Blues
         """
         confusion_matrix_filename = "comfusion_matrix.png"
         cm = confusion_matrix(y_true, y_pred)
@@ -52,6 +58,12 @@ class qzy():
         plt.savefig(fname = confusion_matrix_filename)
     
     def plot_normal_distribution(data):
+        """
+        Method to plot normal distribution based on given data
+        Parameters
+        - data
+        """
+        data = np.array(data)
         median = np.median(data)
         sd = np.std(data)
         print(f"Median: {median}")
@@ -64,11 +76,16 @@ class qzy():
         plt.xlabel('Data')
         plt.ylabel('Density')
         plt.legend()
-        plt.show()
+        plt.savefig('normal_distribution.png')
 
     def DBN_train(network, data_name = "Agent_UpdatedTra_Simulation.csv", shuffled = False, seed = 123):
         """
         Method to train a dbn network
+        Parameters
+        - network: accepts a Dynamic Bayesian network defined by pgmpy
+        - data name, default = "Agent_UpdatedTra_Simulation.csv": the name of data file
+        - shuffled, default = False: parameter controling whether to shuffle the data by participant index. Default is not shuffle
+        - seed, default = 123: sets numpy seeds for shuffling, default seed is 123
         """
 
         data = pd.read_csv(data_name, usecols=['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain', 'participant'])
@@ -98,6 +115,7 @@ class qzy():
             # data_t1 = train_data.shift(-1).rename(columns={col: (col, 1) for col in train_data.columns})
             # complete_data = pd.concat([data_t0, data_t1], axis=1).dropna()
         else:
+            np.random.seed(seed)
             shuffled_data = data
             split_index = int(len(shuffled_data) * 0.8)
             train_data = shuffled_data[:split_index]
@@ -116,6 +134,10 @@ class qzy():
     def DBN_evaluate(network, test_data_name = "test_data.csv", model_name = "trained_model.pkl"):
         """
         Method to evalue the DBN model based on test data given
+        Parameters:
+        - network: accepts a Dynamic Bayesian network defined by pgmpy
+        - test data name, default = "test_data.csv": name of test data file
+        - model name, default = "trained_model.pkl": name of trained model
         """
         confusion_matrix_filename = "comfusion_matrix.png"
 
@@ -184,3 +206,50 @@ class qzy():
             predictions.append(most_confident_prediction)
             true_labels.append(actual_value)
         return(accuracy_score(true_labels, predictions))
+
+    def DBN_T2(network, data_name="Agent_UpdatedTra_Simulation.csv", seed=123):
+        """
+        Method to train and evaluate a dbn network for each participant separately with constant tasks across participants
+        tasks are randomly selected, with the rest to be test data.
+        Parameters:
+        - network: DBN network
+        - data_name: The name of the data file
+        - seed: Seed for numpy's random number generator for reproducibility
+        """
+
+        accuracies = []
+
+        data = pd.read_csv(data_name, usecols=['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain', 'participant', 'task'])
+        data['Time_Helpful_SignSeen'] = pd.cut(data['Time_Helpful_SignSeen'], bins=[0, 8, 85, 336, 9999], labels=[0, 1, 2, 3], right=False)
+        data['uncertain'] = pd.cut(data['uncertain'], bins=[0, 0.52646873, 1.05293746], labels=[0, 1], right=False)
+        data['Num_intersection'] = pd.cut(data['Num_intersection'], bins=[0, 2, 5, 6], labels=[0, 1, 2], right=True)
+        
+        np.random.seed(seed)
+        tasks = data['task'].unique()
+        np.random.shuffle(tasks)
+        train_tasks, test_tasks = tasks[:5], tasks[5:7]
+
+        participants = data['participant'].unique()
+        for participant in participants:
+
+            test_data_filename = f"test_data_participant_{participant}.csv"
+            model_filename = f"trained_model_participant_{participant}.pkl"
+
+            participant_data = data[data['participant'] == participant]
+            train_data = participant_data[participant_data['task'].isin(train_tasks)]
+            test_data = participant_data[participant_data['task'].isin(test_tasks)]
+            train_data = train_data.drop(columns=['participant', 'task'])
+            data_t0 = train_data.rename(columns={col: (col, 0) for col in train_data.columns})
+            data_t1 = train_data.shift(-1).rename(columns={col: (col, 1) for col in train_data.columns})
+            complete_data = pd.concat([data_t0, data_t1], axis=1).dropna()
+            network.fit(complete_data, estimator='MLE')
+            with open(model_filename, "wb") as file:
+                pickle.dump(network, file, protocol=pickle.HIGHEST_PROTOCOL)
+
+            test_data = test_data.drop(columns=['participant', 'task'])
+            test_data.to_csv(test_data_filename, index=False)
+
+            accuracies.append(qzy.DBN_acc(network, test_data_filename, model_filename))
+        
+        print("Average Accuracy:", accuracies.mean())
+        qzy.plot_normal_distribution(accuracies)
