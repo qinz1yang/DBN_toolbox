@@ -1,4 +1,4 @@
-# v1.2
+# v1.3
 # 2024.2.7, Wed
 # Ithaca, Sunny
 
@@ -77,6 +77,22 @@ class qzy():
         plt.ylabel('Density')
         plt.legend()
         plt.savefig('normal_distribution.png')
+
+    def plot_ground_truth(true_labels, predictions, model_name):
+        plt.figure(figsize=(100, 6))
+        plt.plot(true_labels, label='Ground Truth', linestyle='-', color='blue', linewidth=1)
+        for i, (true, pred) in enumerate(zip(true_labels, predictions)):
+            if true == pred:
+                plt.scatter(i, true, color='red', label='Correct Prediction' if i == 0 else "")
+            # else:
+            #     plt.scatter(i, true, color='blue', label='Ground Truth' if i == 0 else "")
+            # print(i)
+        plt.title('Ground Truth red')
+        plt.xlabel('Sample Index')
+        plt.ylabel('Class')
+        plt.legend(loc='best')
+        plt.tight_layout()
+        plt.savefig(f'{model_name}_ground_truth.png')
 
     def DBN_train(network, data_name = "Agent_UpdatedTra_Simulation.csv", shuffled = False, seed = 123):
         """
@@ -172,7 +188,9 @@ class qzy():
         print(f"F1 Score: {f1}")
         qzy.plot_confusion_matrix(true_labels, predictions, classes)
 
-        html_filename = 'model_evaluation_results.html'
+        qzy.plot_ground_truth(true_labels, predictions, model_name)
+
+        html_filename = f'{model_name}_results.html'
         with open(html_filename, 'w') as f:
             f.write(f"<h1>Model Evaluation Results</h1>")
             f.write(f"<p>Model Name: <b>{model_name}</b></p>")
@@ -184,7 +202,9 @@ class qzy():
             f.write(f"<p>Precision: {precision}</p>")
             f.write(f"<p>Recall: {recall}</p>")
             f.write(f"<p>F1 Score: {f1}</p>")
-        webbrowser.open('file://' + os.path.realpath(html_filename))
+            f.write(f"<h2>Ground Truth vs Predicted Diagram</h2>")
+            f.write(f'<img src="ground_truth_vs_predicted.png"><br>')
+        # webbrowser.open('file://' + os.path.realpath(html_filename))
 
     def DBN_acc(network, test_data_name = "test_data.csv", model_name = "trained_model.pkl"):
         with open(model_name, "rb") as file:
@@ -248,8 +268,8 @@ class qzy():
 
             test_data = test_data.drop(columns=['participant', 'task'])
             test_data.to_csv(test_data_filename, index=False)
-
-            accuracies.append(qzy.DBN_acc(network, test_data_filename, model_filename))
+            qzy.DBN_evaluate(network, test_data_filename, model_filename)
+            # accuracies.append(qzy.DBN_acc(network, test_data_filename, model_filename))
         
         print("Average Accuracy:", accuracies.mean())
         qzy.plot_normal_distribution(accuracies)
