@@ -1,4 +1,4 @@
-# DAIL_toolbox
+# DBN_toolbox
 An encapsulated Python toolbox for training and evaluating the (Dynamic) Bayesian Network. It is designed for the research purposes in Cornell Design and Augmented Intelligence Lab(DAIL).
 
 This class can be called using "from DBN_toolboxes import qzy", and then calling arguments like "qzy.DBN_train()"
