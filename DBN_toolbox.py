@@ -1,6 +1,4 @@
-# v1.3
-# 2024.2.7, Wed
-# Ithaca, Sunny
+# DBN_toolbox
 
 # train
 import pandas as pd
@@ -27,7 +25,7 @@ class qzy():
     """
     qzy's tools for training and evaluating DBN networks
     """
-    def plot_confusion_matrix(y_true, y_pred, classes, title='Confusion Matrix', cmap=plt.cm.Blues):
+    def plot_confusion_matrix(y_true, y_pred, classes, model_name, title='Confusion Matrix', cmap=plt.cm.Blues):
         """
         Method to plot confusion matrix
         Parameters:
@@ -37,7 +35,7 @@ class qzy():
         - title, default = 'Confusion Matrix'
         - cmap, default = plt.cm.Blues
         """
-        confusion_matrix_filename = "comfusion_matrix.png"
+        confusion_matrix_filename = f"{model_name}_comfusion_matrix.png"
         cm = confusion_matrix(y_true, y_pred)
         plt.figure(figsize=(10, 7))
         plt.imshow(cm, interpolation='nearest', cmap=cmap)
@@ -94,7 +92,31 @@ class qzy():
         plt.tight_layout()
         plt.savefig(f'{model_name}_ground_truth.png')
 
-    def DBN_train(network, data_name = "Agent_UpdatedTra_Simulation.csv", shuffled = False, seed = 123):
+    def read_data(data_name, columns, bins):
+        """
+        Reads specified columns from a CSV file, divides each column into specified bins,
+        and assigns labels to these bins starting from 0, 1, 2, and so on.
+        
+        Parameters:
+        - data_name: Name of the CSV file to read from.
+        - columns: List of column names to be read and discretized.
+        - bins: List of integers representing the number of bins for each column.
+        """
+        data = pd.read_csv(data_name, usecols=columns)
+        thresholds = {}
+        i = 0
+        while i < len(columns):
+            if columns[i] == 'participant':
+                i += 1
+            else:
+                data[columns[i]], bins_edges = pd.qcut(data[columns[i]], q=bins[i], labels=False, duplicates='drop', retbins=True)
+                thresholds[columns[i]] = bins_edges
+                print(f"Thresholds for {columns[i]}: {bins_edges}")
+                i += 1
+        return data
+
+
+    def DBN_train(network, columns = ['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain', 'participant'], bins = [4, 3, 3],  data_name = "Agent_UpdatedTra_Simulation.csv", shuffled = False, seed = 123, model_name = "trained_model.pkl"):
         """
         Method to train a dbn network
         Parameters
@@ -103,11 +125,7 @@ class qzy():
         - shuffled, default = False: parameter controling whether to shuffle the data by participant index. Default is not shuffle
         - seed, default = 123: sets numpy seeds for shuffling, default seed is 123
         """
-
-        data = pd.read_csv(data_name, usecols=['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain', 'participant'])
-        data['Time_Helpful_SignSeen'] = pd.cut(data['Time_Helpful_SignSeen'], bins=[0, 8, 85, 336, 9999], labels=[0, 1, 2, 3], right=False)
-        data['uncertain'] = pd.cut(data['uncertain'], bins=[0, 0.52646873, 1.05293746], labels=[0, 1], right=False)
-        data['Num_intersection'] = pd.cut(data['Num_intersection'], bins=[0, 2, 5, 6], labels=[0, 1, 2], right=True)
+        data = qzy.read_data(data_name, columns, bins)
         if (shuffled == True):
             np.random.seed(seed)
             groups = [df for _, df in data.groupby('participant')]
@@ -121,15 +139,6 @@ class qzy():
             data_t0 = train_data.rename(columns={col: (col, 0) for col in train_data.columns})
             data_t1 = train_data.shift(-1).rename(columns={col: (col, 1) for col in train_data.columns})
             complete_data = pd.concat([data_t0, data_t1], axis=1).dropna()
-            # print(train_data)
-            # np.random.seed(seed)
-            # shuffled_data = data.sample(frac=1).reset_index(drop=True)
-            # split_index = int(len(shuffled_data) * 0.8)
-            # train_data = shuffled_data[:split_index]
-            # test_data = shuffled_data[split_index:]
-            # data_t0 = train_data.rename(columns={col: (col, 0) for col in train_data.columns})
-            # data_t1 = train_data.shift(-1).rename(columns={col: (col, 1) for col in train_data.columns})
-            # complete_data = pd.concat([data_t0, data_t1], axis=1).dropna()
         else:
             np.random.seed(seed)
             shuffled_data = data
@@ -141,7 +150,7 @@ class qzy():
             complete_data = pd.concat([data_t0, data_t1], axis=1).dropna()
 
         network.fit(complete_data, estimator='MLE')
-        with open("trained_model.pkl", "wb") as file:
+        with open(model_name, "wb") as file:
             pickle.dump(network, file, protocol=pickle.HIGHEST_PROTOCOL)
         test_data.to_csv("test_data.csv", index=False)
         train_data.to_csv("train_data.csv", index=False)
@@ -155,7 +164,7 @@ class qzy():
         - test data name, default = "test_data.csv": name of test data file
         - model name, default = "trained_model.pkl": name of trained model
         """
-        confusion_matrix_filename = "comfusion_matrix.png"
+        confusion_matrix_filename = f"{model_name}_comfusion_matrix.png"
 
         with open(model_name, "rb") as file:
             dbn = pickle.load(file)
@@ -186,7 +195,8 @@ class qzy():
         print(f"Precision: {precision}")
         print(f"Recall: {recall}")
         print(f"F1 Score: {f1}")
-        qzy.plot_confusion_matrix(true_labels, predictions, classes)
+
+        qzy.plot_confusion_matrix(true_labels, predictions, classes, model_name)
 
         qzy.plot_ground_truth(true_labels, predictions, model_name)
 
@@ -203,7 +213,7 @@ class qzy():
             f.write(f"<p>Recall: {recall}</p>")
             f.write(f"<p>F1 Score: {f1}</p>")
             f.write(f"<h2>Ground Truth vs Predicted Diagram</h2>")
-            f.write(f'<img src="ground_truth_vs_predicted.png"><br>')
+            f.write(f'<img src="{model_name}_ground_truth.png"><br>')
         # webbrowser.open('file://' + os.path.realpath(html_filename))
 
     def DBN_acc(network, test_data_name = "test_data.csv", model_name = "trained_model.pkl"):
@@ -214,6 +224,7 @@ class qzy():
         predictions = []
         true_labels = []
         classes = [0, 1]
+
         for i in range(len(test_data) - 1):
             current_row = test_data.iloc[i]
             evidence = {
@@ -239,10 +250,7 @@ class qzy():
 
         accuracies = []
 
-        data = pd.read_csv(data_name, usecols=['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain', 'participant', 'task'])
-        data['Time_Helpful_SignSeen'] = pd.cut(data['Time_Helpful_SignSeen'], bins=[0, 8, 85, 336, 9999], labels=[0, 1, 2, 3], right=False)
-        data['uncertain'] = pd.cut(data['uncertain'], bins=[0, 0.52646873, 1.05293746], labels=[0, 1], right=False)
-        data['Num_intersection'] = pd.cut(data['Num_intersection'], bins=[0, 2, 5, 6], labels=[0, 1, 2], right=True)
+        data = qzy.read_data(data_name, columns, bins)
         
         np.random.seed(seed)
         tasks = data['task'].unique()
@@ -269,7 +277,32 @@ class qzy():
             test_data = test_data.drop(columns=['participant', 'task'])
             test_data.to_csv(test_data_filename, index=False)
             qzy.DBN_evaluate(network, test_data_filename, model_filename)
-            # accuracies.append(qzy.DBN_acc(network, test_data_filename, model_filename))
-        
-        print("Average Accuracy:", accuracies.mean())
-        qzy.plot_normal_distribution(accuracies)
+
+    def DBN_hyper(network, data_name="Agent_UpdatedTra_Simulation.csv", columns=['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain', 'participant'], ran = 11):
+        best_accuracy = 0
+        best_combination = None
+        num_bins_uncertain = 3
+        dbn = network
+        for num_bins_Time_Helpful_SignSeen in range(2, ran):
+            for num_bins_Num_intersection in range(2, ran):
+                dbn.clear()
+                dbn = DBN()
+                dbn.add_edges_from([
+                    (('Num_intersection', 0), ('uncertain', 0)),
+                    (('Time_Helpful_SignSeen', 0), ('uncertain', 0)),
+                    # participant removed
+                    (('uncertain', 0), ('uncertain', 1)),
+                    (('Num_intersection', 1), ('uncertain', 1)),
+                    (('Time_Helpful_SignSeen', 1), ('uncertain', 1))
+                    # participant 1 removed
+                ])
+                bins = [num_bins_Time_Helpful_SignSeen, num_bins_Num_intersection, num_bins_uncertain]
+                print(bins)
+                qzy.DBN_train(dbn, columns, bins, data_name)
+                accuracy = qzy.DBN_acc(dbn)
+                if accuracy > best_accuracy:
+                    best_accuracy = accuracy
+                    best_combination = bins
+                print("done")
+
+        print(f"Best bin combination: {best_combination} with accuracy: {best_accuracy}")
