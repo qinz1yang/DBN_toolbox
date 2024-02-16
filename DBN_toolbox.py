@@ -466,43 +466,6 @@ class qzy():
         
         return accuracy
 
-    def Logit(network, columns=['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain', 'participant'], bins=[4, 3, 3], data_name="Agent_UpdatedTra_Simulation.csv", shuffled=False, seed=123, model_name="trained_model.pkl"):
-    
-        data = qzy.read_data(data_name, columns, bins)
-        data = data[data['participant'] <= 130]
-        if (shuffled == True):
-            np.random.seed(seed)
-            groups = [df for _, df in data.groupby('participant')]
-            np.random.shuffle(groups)
-            shuffled_data = pd.concat(groups).reset_index(drop=True)
-            split_index = int(len(shuffled_data) * 0.8)
-            train_data = shuffled_data[:split_index]
-            test_data = shuffled_data[split_index:]
-            train_data = train_data.drop(columns=['participant'])
-            test_data = test_data.drop(columns=['participant'])
-        else:
-            np.random.seed(seed)
-            shuffled_data = data
-            split_index = int(len(shuffled_data) * 0.8)
-            train_data = shuffled_data[:split_index]
-            test_data = shuffled_data[split_index:]
-
-        X_train = train_data[['Time_Helpful_SignSeen', 'Num_intersection']]
-        y_train = train_data['uncertain']
-        X_test = test_data[['Time_Helpful_SignSeen', 'Num_intersection']]
-        y_test = test_data['uncertain']
-
-        model = LogisticRegression(random_state=seed)
-        model.fit(X_train, y_train)
-
-        predictions = model.predict(X_test)
-        accuracy = accuracy_score(y_test, predictions)
-        
-        # qzy.plot_confusion_matrix(y_test, predictions, [0,1], "Logistic_Regression")
-        # qzy.plot_ground_truth(y_test, predictions, "Logistic_Regression")
-        
-        return accuracy
-
     def RandomForestModel(network, columns=['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain', 'participant'], bins=[4, 3, 3], data_name="Agent_UpdatedTra_Simulation.csv", shuffled=False, seed=123, model_name="trained_model.pkl"):
     
         data = qzy.read_data(data_name, columns, bins)
@@ -574,6 +537,8 @@ class qzy():
         qzy.plot_normal_curve(DBN_accs, 'DBN', 'blue')
         qzy.plot_normal_curve(LOG_accs, 'Logistic Regression', 'red')
         qzy.plot_normal_curve(FOR_accs, 'Random Forest', 'green')
+
+        # Finalizing the plot
         plt.title('model comparison')
         plt.xlabel('Accuracy')
         plt.ylabel('Probability Density')
