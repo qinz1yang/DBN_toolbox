@@ -253,6 +253,37 @@ class qzy():
             predictions.append(most_confident_prediction)
             true_labels.append(actual_value)
         return(accuracy_score(true_labels, predictions))
+        
+    def DBN_acc_and_sensitivity(network, test_data_name="test_data.csv", model_name="trained_model.pkl"):
+        with open(model_name, "rb") as file:
+            dbn = pickle.load(file)
+        test_data = pd.read_csv(test_data_name)
+        dbn_inference = DBNInference(dbn)
+        predictions = []
+        true_labels = []
+        classes = [0, 1]
+
+        for i in range(len(test_data) - 1):
+            current_row = test_data.iloc[i]
+            evidence = {
+                ('Time_Helpful_SignSeen', 0): current_row['Time_Helpful_SignSeen'],
+                ('Num_intersection', 0): current_row['Num_intersection']
+            }
+            prediction = dbn_inference.forward_inference([('uncertain', 1)], evidence=evidence)
+            most_confident_prediction = np.argmax(prediction[('uncertain', 1)].values)
+            actual_value = test_data.iloc[i + 1]['uncertain']
+            predictions.append(most_confident_prediction)
+            true_labels.append(actual_value)
+
+        accuracy = accuracy_score(true_labels, predictions)
+
+        cm = confusion_matrix(true_labels, predictions)
+        TP = cm[1, 1]
+        FN = cm[1, 0]
+
+        sensitivity = TP / (TP + FN) if (TP + FN) > 0 else 0
+
+        return accuracy, sensitivity
 
     def DBN_T2(network, data_name="Agent_UpdatedTra_Simulation.csv", seed=123):
         """
@@ -460,11 +491,17 @@ class qzy():
 
         predictions = model.predict(X_test)
         accuracy = accuracy_score(y_test, predictions)
+
+        cm = confusion_matrix(y_test, predictions)
+        TP = cm[1, 1]
+        FN = cm[1, 0]
         
+        sensitivity = TP / (TP + FN) if (TP + FN) > 0 else 0
+
         # qzy.plot_confusion_matrix(y_test, predictions, [0,1], "Logistic_Regression")
         # qzy.plot_ground_truth(y_test, predictions, "Logistic_Regression")
         
-        return accuracy
+        return accuracy, sensitivity
 
     def RandomForestModel(network, columns=['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain', 'participant'], bins=[4, 3, 3], data_name="Agent_UpdatedTra_Simulation.csv", shuffled=False, seed=123, model_name="trained_model.pkl"):
     
@@ -497,17 +534,26 @@ class qzy():
 
         predictions = model.predict(X_test)
         accuracy = accuracy_score(y_test, predictions)
+
+        cm = confusion_matrix(y_test, predictions)
+        TP = cm[1, 1]
+        FN = cm[1, 0]
+
+        sensitivity = TP / (TP + FN) if (TP + FN) > 0 else 0
         
         # qzy.plot_confusion_matrix(y_test, predictions, [0,1], "Random_Forest")
         # qzy.plot_ground_truth(y_test, predictions, "Random_Forest")
         
-        return accuracy
+        return accuracy, sensitivity
 
     def compare_models():
         i = 1001
         DBN_accs = []
         LOG_accs = []
         FOR_accs = []
+        DBN_sen = []
+        LOG_sen = []
+        FOR_sen = []
         number_of_iterations = 100
         maxn = 1000+number_of_iterations
         dbn = DBN()
@@ -526,9 +572,9 @@ class qzy():
             ])
 
             qzy.DBN_train(network=dbn, data_name="Agent_UpdatedTra_Simulation.csv",bins = [4, 3, 3], shuffled=True, seed=i)
-            DBN_accs.append(qzy.DBN_acc(dbn))
-            LOG_accs.append(qzy.Logit(network=dbn, data_name="Agent_UpdatedTra_Simulation.csv",bins = [4, 3, 3], shuffled=True, seed=i))
-            FOR_accs.append(qzy.RandomForestModel(network=dbn, data_name="Agent_UpdatedTra_Simulation.csv",bins = [4, 3, 3], shuffled=True, seed=i))
+            DBN_accs, DBN_sen.append(qzy.DBN_acc(dbn))
+            LOG_accs, LOG_sen.append(qzy.Logit(network=dbn, data_name="Agent_UpdatedTra_Simulation.csv",bins = [4, 3, 3], shuffled=True, seed=i))
+            FOR_accs, FOR_sen.append(qzy.RandomForestModel(network=dbn, data_name="Agent_UpdatedTra_Simulation.csv",bins = [4, 3, 3], shuffled=True, seed=i))
             print(str(i-1000) + "/" + str(number_of_iterations))
             i += 1
 
@@ -538,9 +584,21 @@ class qzy():
         qzy.plot_normal_curve(LOG_accs, 'Logistic Regression', 'red')
         qzy.plot_normal_curve(FOR_accs, 'Random Forest', 'green')
 
-        # Finalizing the plot
         plt.title('model comparison')
         plt.xlabel('Accuracy')
         plt.ylabel('Probability Density')
         plt.legend()
         plt.savefig("DBNVSLOG.png")
+
+
+        plt.figure(figsize=(10, 6))
+
+        qzy.plot_normal_curve(DBN_sen, 'DBN', 'blue')
+        qzy.plot_normal_curve(LOG_sen, 'Logistic Regression', 'red')
+        qzy.plot_normal_curve(FOR_sen, 'Random Forest', 'green')
+
+        plt.title('model sensitivity comparison')
+        plt.xlabel('Sensitivity')
+        plt.ylabel('Probability Density')
+        plt.legend()
+        plt.savefig("Compare_sensitivity.png")
