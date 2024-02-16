@@ -20,6 +20,10 @@ import os
 import matplotlib.pyplot as plt
 import scipy.stats as stats
 
+# logistic regression
+from sklearn.linear_model import LogisticRegression
+
+from sklearn.ensemble import RandomForestClassifier
 
 class qzy():
     """
@@ -54,7 +58,14 @@ class qzy():
         plt.ylabel('True label')
         plt.xlabel('Predicted label')
         plt.savefig(fname = confusion_matrix_filename)
-    
+
+    def plot_normal_curve(data, label, color):
+        mu, std = np.mean(data), np.std(data)
+        xs = np.linspace(mu - 3*std, mu + 3*std, 100)
+        ys = (1 / (std * np.sqrt(2 * np.pi))) * np.exp(-0.5 * ((xs - mu) / std) ** 2)
+        plt.plot(xs, ys, label=f'{label} Normal Dist.', color=color)
+        plt.axvline(x=mu, color=color, linestyle='--', label=f'{label} Mean: {mu:.4f} SD: {std:.4f}')
+
     def plot_normal_distribution(data):
         """
         Method to plot normal distribution based on given data
@@ -70,6 +81,11 @@ class qzy():
         density = stats.gaussian_kde(data)
         xs = np.linspace(min(data), max(data), 200)
         plt.plot(xs, density(xs), label='Density')
+
+        plt.axvline(x=median, color='r', linestyle='--', label='Median')
+        plt.axvline(x=median-sd, color='g', linestyle=':', label='Median - 1 SD')
+        plt.axvline(x=median+sd, color='g', linestyle=':', label='Median + 1 SD')
+    
         plt.title('Normal Distribution of Data')
         plt.xlabel('Data')
         plt.ylabel('Density')
@@ -283,6 +299,7 @@ class qzy():
         best_combination = None
         num_bins_uncertain = 3
         dbn = network
+        # Iterate over possible bin numbers for each feature with a leap of 5
         for num_bins_Time_Helpful_SignSeen in range(2, ran):
             for num_bins_Num_intersection in range(2, ran):
                 dbn.clear()
@@ -298,11 +315,267 @@ class qzy():
                 ])
                 bins = [num_bins_Time_Helpful_SignSeen, num_bins_Num_intersection, num_bins_uncertain]
                 print(bins)
+                # Train the model with the current bin configuration
                 qzy.DBN_train(dbn, columns, bins, data_name)
+                # Evaluate the model
                 accuracy = qzy.DBN_acc(dbn)
+                # Update best combination if current configuration is better
                 if accuracy > best_accuracy:
                     best_accuracy = accuracy
                     best_combination = bins
                 print("done")
-
         print(f"Best bin combination: {best_combination} with accuracy: {best_accuracy}")
+
+    def DBN_T3(network, columns = ['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain', 'participant'], bins = [4, 3, 3],  data_name = "Agent_UpdatedTra_Simulation.csv", shuffled = False, seed = 123, model_name = "trained_model.pkl"):
+        """
+        Method to train a dbn network
+        Participant with index > 130 are excluded
+        Parameters
+        - network: accepts a Dynamic Bayesian network defined by pgmpy
+        - data name, default = "Agent_UpdatedTra_Simulation.csv": the name of data file
+        - shuffled, default = False: parameter controling whether to shuffle the data by participant index. Default is not shuffle
+        - seed, default = 123: sets numpy seeds for shuffling, default seed is 123
+        """
+        data = qzy.read_data(data_name, columns, bins)
+
+        data = data[data['participant'] <= 130]
+
+        if (shuffled == True):
+            np.random.seed(seed)
+            groups = [df for _, df in data.groupby('participant')]
+            np.random.shuffle(groups)
+            shuffled_data = pd.concat(groups).reset_index(drop=True)
+            split_index = int(len(shuffled_data) * 0.8)
+            train_data = shuffled_data[:split_index]
+            test_data = shuffled_data[split_index:]
+            train_data = train_data.drop(columns=['participant'])
+            test_data = test_data.drop(columns=['participant'])
+            data_t0 = train_data.rename(columns={col: (col, 0) for col in train_data.columns})
+            data_t1 = train_data.shift(-1).rename(columns={col: (col, 1) for col in train_data.columns})
+            complete_data = pd.concat([data_t0, data_t1], axis=1).dropna()
+        else:
+            np.random.seed(seed)
+            shuffled_data = data
+            split_index = int(len(shuffled_data) * 0.8)
+            train_data = shuffled_data[:split_index]
+            test_data = shuffled_data[split_index:]
+            data_t0 = train_data.rename(columns={col: (col, 0) for col in train_data.columns})
+            data_t1 = train_data.shift(-1).rename(columns={col: (col, 1) for col in train_data.columns})
+            complete_data = pd.concat([data_t0, data_t1], axis=1).dropna()
+
+        network.fit(complete_data, estimator='MLE')
+        with open(model_name, "wb") as file:
+            pickle.dump(network, file, protocol=pickle.HIGHEST_PROTOCOL)
+        test_data.to_csv("test_data.csv", index=False)
+        train_data.to_csv("train_data.csv", index=False)
+        print("Training completed and model saved.")
+
+    def DBN_T4(network, columns = ['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain', 'participant'], bins = [4, 3, 3],  data_name = "Agent_UpdatedTra_Simulation.csv", shuffled = False, seed = 123, model_name = "trained_model.pkl"):
+        """
+        Method to train a dbn network
+        Train with participant >= 34 && participant <=130
+        Parameters
+        - network: accepts a Dynamic Bayesian network defined by pgmpy
+        - data name, default = "Agent_UpdatedTra_Simulation.csv": the name of data file
+        - shuffled, default = False: parameter controling whether to shuffle the data by participant index. Default is not shuffle
+        - seed, default = 123: sets numpy seeds for shuffling, default seed is 123
+        """
+        data = qzy.read_data(data_name, columns, bins)
+
+        data = data[data['participant'] <= 130]
+
+        train_data = data[data['participant'] > 34]
+        test_data = data[data['participant'] <= 34]
+        data_t0 = train_data.rename(columns={col: (col, 0) for col in train_data.columns})
+        data_t1 = train_data.shift(-1).rename(columns={col: (col, 1) for col in train_data.columns})
+        complete_data = pd.concat([data_t0, data_t1], axis=1).dropna()
+
+        network.fit(complete_data, estimator='MLE')
+        with open(model_name, "wb") as file:
+            pickle.dump(network, file, protocol=pickle.HIGHEST_PROTOCOL)
+        test_data.to_csv("test_data.csv", index=False)
+        train_data.to_csv("train_data.csv", index=False)
+        print("Training completed and model saved.")
+
+    def DBN_T4_hyper(network, data_name="Agent_UpdatedTra_Simulation.csv", columns=['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain', 'participant'], ran = 11):
+        best_accuracy = 0
+        best_combination = None
+        num_bins_uncertain = 3
+        dbn = network
+        # Iterate over possible bin numbers for each feature with a leap of 5
+        for num_bins_Time_Helpful_SignSeen in range(2, ran):
+            for num_bins_Num_intersection in range(2, ran):
+                dbn.clear()
+                dbn = DBN()
+                dbn.add_edges_from([
+                    (('Num_intersection', 0), ('uncertain', 0)),
+                    (('Time_Helpful_SignSeen', 0), ('uncertain', 0)),
+                    # participant removed
+                    (('uncertain', 0), ('uncertain', 1)),
+                    (('Num_intersection', 1), ('uncertain', 1)),
+                    (('Time_Helpful_SignSeen', 1), ('uncertain', 1))
+                    # participant 1 removed
+                ])
+                bins = [num_bins_Time_Helpful_SignSeen, num_bins_Num_intersection, num_bins_uncertain]
+                print(bins)
+                # Train the model with the current bin configuration
+                qzy.DBN_T4(dbn, columns, bins, data_name)
+                # Evaluate the model
+                accuracy = qzy.DBN_acc(dbn)
+                # Update best combination if current configuration is better
+                if accuracy > best_accuracy:
+                    best_accuracy = accuracy
+                    best_combination = bins
+                print("done")
+        print(f"Best bin combination: {best_combination} with accuracy: {best_accuracy}")
+
+    def Logit(network, columns=['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain', 'participant'], bins=[4, 3, 3], data_name="Agent_UpdatedTra_Simulation.csv", shuffled=False, seed=123, model_name="trained_model.pkl"):
+    
+        data = qzy.read_data(data_name, columns, bins)
+        data = data[data['participant'] <= 130]
+        if (shuffled == True):
+            np.random.seed(seed)
+            groups = [df for _, df in data.groupby('participant')]
+            np.random.shuffle(groups)
+            shuffled_data = pd.concat(groups).reset_index(drop=True)
+            split_index = int(len(shuffled_data) * 0.8)
+            train_data = shuffled_data[:split_index]
+            test_data = shuffled_data[split_index:]
+            train_data = train_data.drop(columns=['participant'])
+            test_data = test_data.drop(columns=['participant'])
+        else:
+            np.random.seed(seed)
+            shuffled_data = data
+            split_index = int(len(shuffled_data) * 0.8)
+            train_data = shuffled_data[:split_index]
+            test_data = shuffled_data[split_index:]
+
+        X_train = train_data[['Time_Helpful_SignSeen', 'Num_intersection']]
+        y_train = train_data['uncertain']
+        X_test = test_data[['Time_Helpful_SignSeen', 'Num_intersection']]
+        y_test = test_data['uncertain']
+
+        model = LogisticRegression(random_state=seed)
+        model.fit(X_train, y_train)
+
+        predictions = model.predict(X_test)
+        accuracy = accuracy_score(y_test, predictions)
+        
+        # qzy.plot_confusion_matrix(y_test, predictions, [0,1], "Logistic_Regression")
+        # qzy.plot_ground_truth(y_test, predictions, "Logistic_Regression")
+        
+        return accuracy
+
+    def Logit(network, columns=['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain', 'participant'], bins=[4, 3, 3], data_name="Agent_UpdatedTra_Simulation.csv", shuffled=False, seed=123, model_name="trained_model.pkl"):
+    
+        data = qzy.read_data(data_name, columns, bins)
+        data = data[data['participant'] <= 130]
+        if (shuffled == True):
+            np.random.seed(seed)
+            groups = [df for _, df in data.groupby('participant')]
+            np.random.shuffle(groups)
+            shuffled_data = pd.concat(groups).reset_index(drop=True)
+            split_index = int(len(shuffled_data) * 0.8)
+            train_data = shuffled_data[:split_index]
+            test_data = shuffled_data[split_index:]
+            train_data = train_data.drop(columns=['participant'])
+            test_data = test_data.drop(columns=['participant'])
+        else:
+            np.random.seed(seed)
+            shuffled_data = data
+            split_index = int(len(shuffled_data) * 0.8)
+            train_data = shuffled_data[:split_index]
+            test_data = shuffled_data[split_index:]
+
+        X_train = train_data[['Time_Helpful_SignSeen', 'Num_intersection']]
+        y_train = train_data['uncertain']
+        X_test = test_data[['Time_Helpful_SignSeen', 'Num_intersection']]
+        y_test = test_data['uncertain']
+
+        model = LogisticRegression(random_state=seed)
+        model.fit(X_train, y_train)
+
+        predictions = model.predict(X_test)
+        accuracy = accuracy_score(y_test, predictions)
+        
+        # qzy.plot_confusion_matrix(y_test, predictions, [0,1], "Logistic_Regression")
+        # qzy.plot_ground_truth(y_test, predictions, "Logistic_Regression")
+        
+        return accuracy
+
+    def RandomForestModel(network, columns=['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain', 'participant'], bins=[4, 3, 3], data_name="Agent_UpdatedTra_Simulation.csv", shuffled=False, seed=123, model_name="trained_model.pkl"):
+    
+        data = qzy.read_data(data_name, columns, bins)
+        data = data[data['participant'] <= 130]
+        if shuffled:
+            np.random.seed(seed)
+            groups = [df for _, df in data.groupby('participant')]
+            np.random.shuffle(groups)
+            shuffled_data = pd.concat(groups).reset_index(drop=True)
+            split_index = int(len(shuffled_data) * 0.8)
+            train_data = shuffled_data[:split_index]
+            test_data = shuffled_data[split_index:]
+            train_data = train_data.drop(columns=['participant'])
+            test_data = test_data.drop(columns=['participant'])
+        else:
+            np.random.seed(seed)
+            shuffled_data = data
+            split_index = int(len(shuffled_data) * 0.8)
+            train_data = shuffled_data[:split_index]
+            test_data = shuffled_data[split_index:]
+
+        X_train = train_data[['Time_Helpful_SignSeen', 'Num_intersection']]
+        y_train = train_data['uncertain']
+        X_test = test_data[['Time_Helpful_SignSeen', 'Num_intersection']]
+        y_test = test_data['uncertain']
+
+        model = RandomForestClassifier(random_state=seed)  # Use RandomForestClassifier here
+        model.fit(X_train, y_train)
+
+        predictions = model.predict(X_test)
+        accuracy = accuracy_score(y_test, predictions)
+        
+        # qzy.plot_confusion_matrix(y_test, predictions, [0,1], "Random_Forest")
+        # qzy.plot_ground_truth(y_test, predictions, "Random_Forest")
+        
+        return accuracy
+
+    def compare_models():
+        i = 1001
+        DBN_accs = []
+        LOG_accs = []
+        FOR_accs = []
+        number_of_iterations = 100
+        maxn = 1000+number_of_iterations
+        dbn = DBN()
+
+        while i <= maxn:
+            dbn.clear()
+            dbn = DBN()
+            dbn.add_edges_from([
+                (('Num_intersection', 0), ('uncertain', 0)),
+                (('Time_Helpful_SignSeen', 0), ('uncertain', 0)),
+                # participant removed
+                (('uncertain', 0), ('uncertain', 1)),
+                (('Num_intersection', 1), ('uncertain', 1)),
+                (('Time_Helpful_SignSeen', 1), ('uncertain', 1))
+                # participant 1 removed
+            ])
+
+            qzy.DBN_train(network=dbn, data_name="Agent_UpdatedTra_Simulation.csv",bins = [4, 3, 3], shuffled=True, seed=i)
+            DBN_accs.append(qzy.DBN_acc(dbn))
+            LOG_accs.append(qzy.Logit(network=dbn, data_name="Agent_UpdatedTra_Simulation.csv",bins = [4, 3, 3], shuffled=True, seed=i))
+            FOR_accs.append(qzy.RandomForestModel(network=dbn, data_name="Agent_UpdatedTra_Simulation.csv",bins = [4, 3, 3], shuffled=True, seed=i))
+            print(str(i-1000) + "/" + str(number_of_iterations))
+            i += 1
+
+        plt.figure(figsize=(10, 6))
+
+        qzy.plot_normal_curve(DBN_accs, 'DBN', 'blue')
+        qzy.plot_normal_curve(LOG_accs, 'Logistic Regression', 'red')
+        qzy.plot_normal_curve(FOR_accs, 'Random Forest', 'green')
+        plt.title('model comparison')
+        plt.xlabel('Accuracy')
+        plt.ylabel('Probability Density')
+        plt.legend()
+        plt.savefig("DBNVSLOG.png")
