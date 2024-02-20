@@ -1,5 +1,5 @@
 from pgmpy.models import DynamicBayesianNetwork as DBN
-from DBN_toolbox import qzy
+from DBN_toolbox_test import qzy
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
@@ -7,30 +7,30 @@ import numpy as np
 import warnings
 warnings.filterwarnings("ignore")
 
-dbn = DBN()
-dbn.add_edges_from([
-    (('Num_intersection', 0), ('uncertain', 0)),
-    (('Time_Helpful_SignSeen', 0), ('uncertain', 0)),
-    # participant removed
-    (('uncertain', 0), ('uncertain', 1)),
-    (('Num_intersection', 1), ('uncertain', 1)),
-    (('Time_Helpful_SignSeen', 1), ('uncertain', 1))
-    # participant 1 removed
-])
+# dbn = DBN()
+# dbn.add_edges_from([
+#     (('Num_intersection', 0), ('uncertain', 0)),
+#     (('Time_Helpful_SignSeen', 0), ('uncertain', 0)),
+#     # participant removed
+#     (('uncertain', 0), ('uncertain', 1)),
+#     (('Num_intersection', 1), ('uncertain', 1)),
+#     (('Time_Helpful_SignSeen', 1), ('uncertain', 1))
+#     # participant 1 removed
+# ])
 
-# data, thresholds = qzy.read_data("Agent_UpdatedTra_Simulation.csv", ['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain', 'participant'], [4, 3, 3])
-# data.to_csv("readdata.csv", index=False)
-# print(thresholds)
-# data = pd.read_csv("Agent_UpdatedTra_Simulation.csv", usecols=['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain', 'participant'])
-# plt.hist(data['uncertain'].dropna(), bins=50)  # Adjust bins if needed
-# plt.title("Distribution of 'uncertain' Column")
-# plt.xlabel('Value')
-# plt.ylabel('Frequency')
-# plt.show()
-
-# # T0
 # qzy.DBN_train(network=dbn, data_name="Agent_UpdatedTra_Simulation.csv",bins = [4, 3, 3], shuffled=True, seed=1021)
 # qzy.DBN_evaluate(dbn)
+
+variables = ['Num_intersection', 'Time_Helpful_SignSeen', 'Circularity', 'Occlusivity', 'Elongation', 'Drift Angle','Visible_All_Sign', 'Visible_Helpful_Sign', 'Cloest_Helpful_Dist','Jagged_360', 'sbsod', 'age', 'uncertain']
+variables_to_add = ['Num_intersection', 'Time_Helpful_SignSeen', 'Circularity', 'Occlusivity', 'Elongation', 'Drift Angle','Visible_All_Sign', 'Visible_Helpful_Sign', 'Cloest_Helpful_Dist','Jagged_360', 'sbsod', 'age']
+
+network = qzy.DBN_ini(variables_to_add)
+
+
+
+# T0
+qzy.DBN_train(network, columns=variables, data_name="Agent_UpdatedTra_Simulation.csv", bins = [4, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3], shuffled=True, seed=1021)
+qzy.DBN_evaluate(network, variables_to_add = ['Num_intersection', 'Time_Helpful_SignSeen', 'Circularity', 'Occlusivity', 'Elongation', 'Drift Angle','Visible_All_Sign', 'Visible_Helpful_Sign', 'Cloest_Helpful_Dist','Jagged_360', 'sbsod', 'age'])
 
 # # T1
 # i = 1001
@@ -93,5 +93,5 @@ dbn.add_edges_from([
 # qzy.DBN_train(network=dbn, data_name="Agent_UpdatedTra_Simulation.csv",bins = [4, 3, 3], shuffled=True, seed=1021)
 # print(qzy.DBN_acc_and_sensitivity(dbn))
 
-# Compare models
-qzy.compare_models()
+# # Compare models
+# qzy.compare_models()
