@@ -16,6 +16,7 @@ from itertools import cycle
 import numpy as np
 import webbrowser
 import os
+from statistics import mean 
 # plot
 import matplotlib.pyplot as plt
 import scipy.stats as stats
@@ -29,6 +30,25 @@ class qzy():
     """
     qzy's tools for training and evaluating DBN networks
     """
+
+    def DBN_ini(variables_to_add = ['Num_intersection', 'Time_Helpful_SignSeen', 'Circularity', 'Occlusivity', 'Elongation', 'DriftAngle','Visible_All_Sign', 'Visible_Helpful_Sign', 'Closest_Helpful_Dist','Jagged_360', 'sbsod', 'age']):
+        dbn = DBN()
+        dbn_edges = [
+            (('uncertain', 0), ('uncertain', 1)),
+        ]
+        for variable in variables_to_add:
+            dbn_edges.append(((variable, 0), ('uncertain', 0)))
+            dbn_edges.append(((variable, 1), ('uncertain', 1)))
+        
+        dbn.add_edges_from(dbn_edges)
+
+        if dbn.check_model():
+            return dbn
+        else:
+            print("There is an error initializing the model.")
+
+
+
     def plot_confusion_matrix(y_true, y_pred, classes, model_name, title='Confusion Matrix', cmap=plt.cm.Blues):
         """
         Method to plot confusion matrix
@@ -101,6 +121,7 @@ class qzy():
             # else:
             #     plt.scatter(i, true, color='blue', label='Ground Truth' if i == 0 else "")
             # print(i)
+            print(str(i+1) + "/" + str(len(true_labels)), end = "\r")
         plt.title('Ground Truth red')
         plt.xlabel('Sample Index')
         plt.ylabel('Class')
@@ -118,16 +139,18 @@ class qzy():
         - columns: List of column names to be read and discretized.
         - bins: List of integers representing the number of bins for each column.
         """
-        data = pd.read_csv(data_name, usecols=columns)
+        local_columns = columns
+        columns.append('participant')
+        data = pd.read_csv(data_name, usecols=local_columns)
         thresholds = {}
         i = 0
-        while i < len(columns):
-            if columns[i] == 'participant':
+        while i < len(local_columns):
+            if local_columns[i] == 'participant' or local_columns == 'task':
                 i += 1
             else:
-                data[columns[i]], bins_edges = pd.qcut(data[columns[i]], q=bins[i], labels=False, duplicates='drop', retbins=True)
-                thresholds[columns[i]] = bins_edges
-                print(f"Thresholds for {columns[i]}: {bins_edges}")
+                data[local_columns[i]], bins_edges = pd.qcut(data[local_columns[i]], q=bins[i], labels=False, duplicates='drop', retbins=True)
+                thresholds[local_columns[i]] = bins_edges
+                print(f"Thresholds for {local_columns[i]}: {bins_edges}")
                 i += 1
         return data
 
@@ -172,9 +195,9 @@ class qzy():
         train_data.to_csv("train_data.csv", index=False)
         print("Training completed and model saved.")
 
-    def DBN_evaluate(network, test_data_name = "test_data.csv", model_name = "trained_model.pkl"):
+    def DBN_evaluate(network, test_data_name="test_data.csv", model_name="trained_model.pkl", variables_to_add = ['Time_Helpful_SignSeen', 'Num_intersection']):
         """
-        Method to evalue the DBN model based on test data given
+        Method to evaluate the DBN model based on test data given.
         Parameters:
         - network: accepts a Dynamic Bayesian network defined by pgmpy
         - test data name, default = "test_data.csv": name of test data file
@@ -189,13 +212,17 @@ class qzy():
         predictions = []
         true_labels = []
         classes = [0, 1]
-        
+
+        available_vars = [var for var in variables_to_add if var in test_data.columns]
+        print("avaliable vars")
+        print(available_vars)
         for i in range(len(test_data) - 1):
             current_row = test_data.iloc[i]
-            evidence = {
-                ('Time_Helpful_SignSeen', 0): current_row['Time_Helpful_SignSeen'],
-                ('Num_intersection', 0): current_row['Num_intersection']
-            }
+            evidence = {}
+            for var in variables_to_add:
+                if var in current_row:
+                    evidence[(var, 0)] = current_row[var]
+            # print(evidence)
             prediction = dbn_inference.forward_inference([('uncertain', 1)], evidence=evidence)
             most_confident_prediction = np.argmax(prediction[('uncertain', 1)].values)
             actual_value = test_data.iloc[i + 1]['uncertain']
@@ -203,17 +230,14 @@ class qzy():
             true_labels.append(actual_value)
 
         accuracy = accuracy_score(true_labels, predictions)
-        precision = precision_score(true_labels, predictions, average='weighted')
-        recall = recall_score(true_labels, predictions, average='weighted')
-        f1 = f1_score(true_labels, predictions, average='weighted')
-
+        precision = precision_score(true_labels, predictions, labels=classes, average='weighted')
+        recall = recall_score(true_labels, predictions, labels=classes, average='weighted')
+        f1 = f1_score(true_labels, predictions, labels=classes, average='weighted')
         print(f"Accuracy: {accuracy}")
         print(f"Precision: {precision}")
         print(f"Recall: {recall}")
         print(f"F1 Score: {f1}")
-
         qzy.plot_confusion_matrix(true_labels, predictions, classes, model_name)
-
         qzy.plot_ground_truth(true_labels, predictions, model_name)
 
         html_filename = f'{model_name}_results.html'
@@ -224,12 +248,12 @@ class qzy():
             f.write(f"<p>Accuracy: {accuracy}</p>")
             f.write(f"<p>Confusion Matrix:</p>")
             f.write(f'<img src="{confusion_matrix_filename}"><br>')
-            f.write(f"<p>Accuracy: {accuracy}</p>")
             f.write(f"<p>Precision: {precision}</p>")
             f.write(f"<p>Recall: {recall}</p>")
             f.write(f"<p>F1 Score: {f1}</p>")
             f.write(f"<h2>Ground Truth vs Predicted Diagram</h2>")
             f.write(f'<img src="{model_name}_ground_truth.png"><br>')
+
         # webbrowser.open('file://' + os.path.realpath(html_filename))
 
     def DBN_acc(network, test_data_name = "test_data.csv", model_name = "trained_model.pkl"):
@@ -240,7 +264,6 @@ class qzy():
         predictions = []
         true_labels = []
         classes = [0, 1]
-
         for i in range(len(test_data) - 1):
             current_row = test_data.iloc[i]
             evidence = {
@@ -296,20 +319,19 @@ class qzy():
         """
 
         accuracies = []
-
-        data = qzy.read_data(data_name, columns, bins)
+        data = pd.read_csv(data_name, usecols=['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain', 'participant', 'task'])
+        data['Time_Helpful_SignSeen'] = pd.cut(data['Time_Helpful_SignSeen'], bins=[0, 8, 85, 336, 9999], labels=[0, 1, 2, 3], right=False)
+        data['uncertain'] = pd.cut(data['uncertain'], bins=[0, 0.52646873, 1.05293746], labels=[0, 1], right=False)
+        data['Num_intersection'] = pd.cut(data['Num_intersection'], bins=[0, 2, 5, 6], labels=[0, 1, 2], right=True)
         
         np.random.seed(seed)
         tasks = data['task'].unique()
         np.random.shuffle(tasks)
         train_tasks, test_tasks = tasks[:5], tasks[5:7]
-
         participants = data['participant'].unique()
         for participant in participants:
-
             test_data_filename = f"test_data_participant_{participant}.csv"
             model_filename = f"trained_model_participant_{participant}.pkl"
-
             participant_data = data[data['participant'] == participant]
             train_data = participant_data[participant_data['task'].isin(train_tasks)]
             test_data = participant_data[participant_data['task'].isin(test_tasks)]
@@ -323,7 +345,16 @@ class qzy():
 
             test_data = test_data.drop(columns=['participant', 'task'])
             test_data.to_csv(test_data_filename, index=False)
-            qzy.DBN_evaluate(network, test_data_filename, model_filename)
+
+            acc = qzy.DBN_acc(network, test_data_filename, model_filename)
+            accuracies.append(acc)
+            # qzy.DBN_evaluate(network, test_data_filename, model_filename)
+            # accuracies.append(qzy.DBN_acc(network, test_data_filename, model_filename))
+            print(acc)
+
+        print(f"The mean accuracy of T2 is: {mean(accuracies)}")
+        print(f"The standard deviation of T2 is: {np.std(accuracies)}")
+
 
     def DBN_hyper(network, data_name="Agent_UpdatedTra_Simulation.csv", columns=['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain', 'participant'], ran = 11):
         best_accuracy = 0
