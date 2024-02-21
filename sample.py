@@ -1,5 +1,5 @@
 from pgmpy.models import DynamicBayesianNetwork as DBN
-from DBN_toolbox_test import qzy
+from DBN_toolbox import qzy
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
