@@ -102,9 +102,9 @@ class qzy():
         xs = np.linspace(min(data), max(data), 200)
         plt.plot(xs, density(xs), label='Density')
 
-        plt.axvline(x=median, color='r', linestyle='--', label='Median')
-        plt.axvline(x=median-sd, color='g', linestyle=':', label='Median - 1 SD')
-        plt.axvline(x=median+sd, color='g', linestyle=':', label='Median + 1 SD')
+        plt.axvline(x=median, color='r', linestyle='--', label=f"Median={median:.4f}")
+        plt.axvline(x=median-sd, color='g', linestyle=':', label=f"Median - 1 SD({sd:.4f})")
+        plt.axvline(x=median+sd, color='g', linestyle=':', label=f"Median + 1 SD({sd:.4f})")
     
         plt.title('Normal Distribution of Data')
         plt.xlabel('Data')
@@ -115,6 +115,7 @@ class qzy():
     def plot_ground_truth(true_labels, predictions, model_name):
         plt.figure(figsize=(100, 6))
         plt.plot(true_labels, label='Ground Truth', linestyle='-', color='blue', linewidth=1)
+        print("Plot_ground_truth in progress:")
         for i, (true, pred) in enumerate(zip(true_labels, predictions)):
             if true == pred:
                 plt.scatter(i, true, color='red', label='Correct Prediction' if i == 0 else "")
@@ -122,6 +123,8 @@ class qzy():
             #     plt.scatter(i, true, color='blue', label='Ground Truth' if i == 0 else "")
             # print(i)
             print(str(i+1) + "/" + str(len(true_labels)), end = "\r")
+
+        print("Plot_ground_truth done")
         plt.title('Ground Truth red')
         plt.xlabel('Sample Index')
         plt.ylabel('Class')
@@ -216,6 +219,7 @@ class qzy():
         available_vars = [var for var in variables_to_add if var in test_data.columns]
         print("avaliable vars")
         print(available_vars)
+        print("DBN_evaluate prediction in progress:")
         for i in range(len(test_data) - 1):
             current_row = test_data.iloc[i]
             evidence = {}
@@ -228,7 +232,9 @@ class qzy():
             actual_value = test_data.iloc[i + 1]['uncertain']
             predictions.append(most_confident_prediction)
             true_labels.append(actual_value)
-
+            print(str(i+1) + "/" + str(len(test_data)), end = "\r")
+    
+        print("DBN_evaluate prediction done")
         accuracy = accuracy_score(true_labels, predictions)
         precision = precision_score(true_labels, predictions, labels=classes, average='weighted')
         recall = recall_score(true_labels, predictions, labels=classes, average='weighted')
@@ -240,7 +246,9 @@ class qzy():
         qzy.plot_confusion_matrix(true_labels, predictions, classes, model_name)
         qzy.plot_ground_truth(true_labels, predictions, model_name)
 
+        
         html_filename = f'{model_name}_results.html'
+        print("Writing report to " + html_filename + "...")
         with open(html_filename, 'w') as f:
             f.write(f"<h1>Model Evaluation Results</h1>")
             f.write(f"<p>Model Name: <b>{model_name}</b></p>")
@@ -256,7 +264,7 @@ class qzy():
 
         # webbrowser.open('file://' + os.path.realpath(html_filename))
 
-    def DBN_acc(network, test_data_name = "test_data.csv", model_name = "trained_model.pkl"):
+    def DBN_acc(network, test_data_name = "test_data.csv", model_name = "trained_model.pkl", variables_to_add = ['Time_Helpful_SignSeen', 'Num_intersection']):
         with open(model_name, "rb") as file:
             dbn = pickle.load(file)
         test_data = pd.read_csv(test_data_name)
@@ -264,17 +272,25 @@ class qzy():
         predictions = []
         true_labels = []
         classes = [0, 1]
+        available_vars = [var for var in variables_to_add if var in test_data.columns]
+        print("avaliable vars")
+        print(available_vars)
+        print("DBN_acc prediction in progress:")
         for i in range(len(test_data) - 1):
             current_row = test_data.iloc[i]
-            evidence = {
-                ('Time_Helpful_SignSeen', 0): current_row['Time_Helpful_SignSeen'],
-                ('Num_intersection', 0): current_row['Num_intersection']
-            }
+            evidence = {}
+            for var in variables_to_add:
+                if var in current_row:
+                    evidence[(var, 0)] = current_row[var]
+            # print(evidence)
             prediction = dbn_inference.forward_inference([('uncertain', 1)], evidence=evidence)
             most_confident_prediction = np.argmax(prediction[('uncertain', 1)].values)
             actual_value = test_data.iloc[i + 1]['uncertain']
             predictions.append(most_confident_prediction)
             true_labels.append(actual_value)
+            print(str(i+1) + "/" + str(len(test_data)), end = "\r")
+        
+        print("DBN_evaluate prediction done")
         return(accuracy_score(true_labels, predictions))
         
     def DBN_acc_and_sensitivity(network, test_data_name="test_data.csv", model_name="trained_model.pkl"):
