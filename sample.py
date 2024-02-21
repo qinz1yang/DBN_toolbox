@@ -22,39 +22,38 @@ warnings.filterwarnings("ignore")
 # qzy.DBN_evaluate(dbn)
 
 variables = ['Num_intersection', 'Time_Helpful_SignSeen', 'Circularity', 'Occlusivity', 'Elongation', 'Drift Angle','Visible_All_Sign', 'Visible_Helpful_Sign', 'Cloest_Helpful_Dist','Jagged_360', 'sbsod', 'age', 'uncertain']
-variables_to_add = ['Num_intersection', 'Time_Helpful_SignSeen', 'Circularity', 'Occlusivity', 'Elongation', 'Drift Angle','Visible_All_Sign', 'Visible_Helpful_Sign', 'Cloest_Helpful_Dist','Jagged_360', 'sbsod', 'age']
+predictors = ['Num_intersection', 'Time_Helpful_SignSeen', 'Circularity', 'Occlusivity', 'Elongation', 'Drift Angle','Visible_All_Sign', 'Visible_Helpful_Sign', 'Cloest_Helpful_Dist','Jagged_360', 'sbsod', 'age']
 
-network = qzy.DBN_ini(variables_to_add)
-
-
+network = qzy.DBN_ini(predictors)
 
 # T0
-qzy.DBN_train(network, columns=variables, data_name="Agent_UpdatedTra_Simulation.csv", bins = [4, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3], shuffled=True, seed=1021)
-qzy.DBN_evaluate(network, variables_to_add = ['Num_intersection', 'Time_Helpful_SignSeen', 'Circularity', 'Occlusivity', 'Elongation', 'Drift Angle','Visible_All_Sign', 'Visible_Helpful_Sign', 'Cloest_Helpful_Dist','Jagged_360', 'sbsod', 'age'])
+qzy.DBN_train(network, columns=variables, data_name="Agent_UpdatedTra_Simulation.csv", bins = [4, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3], shuffled=True, seed=1056)
+qzy.DBN_evaluate(network, variables_to_add = predictors)
 
 # # T1
 # i = 1001
 # accs = []
-# number_of_iterations = 20
+# number_of_iterations = 1000
 # maxn = 1000+number_of_iterations
 # highest_accuracy = -999
 # highest_seed = -999
 # while i <= maxn:
-#     dbn.clear()
-#     dbn = DBN()
-#     dbn.add_edges_from([
-#         (('Num_intersection', 0), ('uncertain', 0)),
-#         (('Time_Helpful_SignSeen', 0), ('uncertain', 0)),
-#         # participant removed
-#         (('uncertain', 0), ('uncertain', 1)),
-#         (('Num_intersection', 1), ('uncertain', 1)),
-#         (('Time_Helpful_SignSeen', 1), ('uncertain', 1))
-#         # participant 1 removed
-#     ])
-
-#     qzy.DBN_train(network=dbn, data_name="Agent_UpdatedTra_Simulation.csv",bins = [4, 3, 3], shuffled=True, seed=i)
+#     # dbn.clear()
+#     # dbn = DBN()
+#     # dbn.add_edges_from([
+#     #     (('Num_intersection', 0), ('uncertain', 0)),
+#     #     (('Time_Helpful_SignSeen', 0), ('uncertain', 0)),
+#     #     # participant removed
+#     #     (('uncertain', 0), ('uncertain', 1)),
+#     #     (('Num_intersection', 1), ('uncertain', 1)),
+#     #     (('Time_Helpful_SignSeen', 1), ('uncertain', 1))
+#     #     # participant 1 removed
+#     # ])
+#     network.clear()
+#     network = qzy.DBN_ini(predictors)
+#     qzy.DBN_train(network, columns=variables, data_name="Agent_UpdatedTra_Simulation.csv", bins = [4, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3], shuffled=True, seed=i)
 #     print(str(i-1000) + "/" + str(number_of_iterations))
-#     accuracy = qzy.DBN_acc(dbn)
+#     accuracy = qzy.DBN_acc(network, variables_to_add = predictors)
 #     if (accuracy > highest_accuracy):
 #         highest_accuracy = accuracy
 #         highest_seed = i
@@ -63,7 +62,8 @@ qzy.DBN_evaluate(network, variables_to_add = ['Num_intersection', 'Time_Helpful_
 
 # print(f"highest accuracy: {highest_accuracy}")
 # print(f"seed with highest accuracy: {highest_seed}")
-# # qzy.plot_normal_distribution(accs)
+# print(accs)
+# qzy.plot_normal_distribution(accs)
 
 
 # T2
