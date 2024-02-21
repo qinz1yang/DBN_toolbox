@@ -324,6 +324,29 @@ class qzy():
 
         return accuracy, sensitivity
 
+    def DBN_T1(network, predictors=['Time_Helpful_SignSeen', 'Num_intersection'], number_of_iterations = 20, variables=['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain'], bins=[4,3,3]):
+        i = 1001
+        accs = []
+        maxn = 1000+number_of_iterations
+        highest_accuracy = -999
+        highest_seed = -999
+        while i <= maxn:
+            network.clear()
+            network = qzy.DBN_ini(predictors)
+            qzy.DBN_train(network, columns=variables, data_name="Agent_UpdatedTra_Simulation.csv", bins = [4, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3], shuffled=True, seed=i)
+            print(str(i-1000) + "/" + str(number_of_iterations))
+            accuracy = qzy.DBN_acc(network, variables_to_add = predictors)
+            if (accuracy > highest_accuracy):
+                highest_accuracy = accuracy
+                highest_seed = i
+            accs.append(accuracy)
+            i += 1
+
+        print(f"highest accuracy: {highest_accuracy}")
+        print(f"seed with highest accuracy: {highest_seed}")
+        print(accs)
+        qzy.plot_normal_distribution(accs)
+
     def DBN_T2(network, data_name="Agent_UpdatedTra_Simulation.csv", seed=123):
         """
         Method to train and evaluate a dbn network for each participant separately with constant tasks across participants
