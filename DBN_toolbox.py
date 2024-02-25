@@ -17,6 +17,7 @@ import numpy as np
 import webbrowser
 import os
 from statistics import mean 
+import time
 # plot
 import matplotlib.pyplot as plt
 import scipy.stats as stats
@@ -26,12 +27,16 @@ from sklearn.linear_model import LogisticRegression
 
 from sklearn.ensemble import RandomForestClassifier
 
+import itertools
+
 class qzy():
     """
     qzy's tools for training and evaluating DBN networks
     """
 
     def DBN_ini(variables_to_add = ['Num_intersection', 'Time_Helpful_SignSeen', 'Circularity', 'Occlusivity', 'Elongation', 'DriftAngle','Visible_All_Sign', 'Visible_Helpful_Sign', 'Closest_Helpful_Dist','Jagged_360', 'sbsod', 'age']):
+        dbn = DBN()
+        dbn.clear()
         dbn = DBN()
         dbn_edges = [
             (('uncertain', 0), ('uncertain', 1)),
@@ -122,7 +127,7 @@ class qzy():
             # else:
             #     plt.scatter(i, true, color='blue', label='Ground Truth' if i == 0 else "")
             # print(i)
-            print(str(i+1) + "/" + str(len(true_labels)), end = "\r")
+            # print(str(i+1) + "/" + str(len(true_labels)), end = "\r")
 
         print("Plot_ground_truth done")
         plt.title('Ground Truth red')
@@ -143,12 +148,14 @@ class qzy():
         - bins: List of integers representing the number of bins for each column.
         """
         local_columns = columns
-        columns.append('participant')
+        if 'participant' not in local_columns:
+            local_columns.append('participant')
+        print(f"Read following columns :{local_columns}")
         data = pd.read_csv(data_name, usecols=local_columns)
         thresholds = {}
         i = 0
         while i < len(local_columns):
-            if local_columns[i] == 'participant' or local_columns == 'task':
+            if local_columns[i] == 'participant' or local_columns[i] == 'task':
                 i += 1
             else:
                 data[local_columns[i]], bins_edges = pd.qcut(data[local_columns[i]], q=bins[i], labels=False, duplicates='drop', retbins=True)
@@ -158,7 +165,7 @@ class qzy():
         return data
 
 
-    def DBN_train(network, columns = ['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain', 'participant'], bins = [4, 3, 3],  data_name = "Agent_UpdatedTra_Simulation.csv", shuffled = False, seed = 123, model_name = "trained_model.pkl"):
+    def DBN_train(network, columns = ['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain', 'participant'], bins = [4, 3, 3],  data_name = "Agent_UpdatedTra_Simulation.csv", shuffled = False, seed = 123, model_name = "trained_model.pkl", fast=False):
         """
         Method to train a dbn network
         Parameters
@@ -192,11 +199,16 @@ class qzy():
             complete_data = pd.concat([data_t0, data_t1], axis=1).dropna()
 
         network.fit(complete_data, estimator='MLE')
-        with open(model_name, "wb") as file:
-            pickle.dump(network, file, protocol=pickle.HIGHEST_PROTOCOL)
-        test_data.to_csv("test_data.csv", index=False)
-        train_data.to_csv("train_data.csv", index=False)
+        
+        if (fast == False):
+            with open(model_name, "wb") as file:
+                pickle.dump(network, file, protocol=pickle.HIGHEST_PROTOCOL)
+            test_data.to_csv("test_data.csv", index=False)
+            train_data.to_csv("train_data.csv", index=False)
+        else:
+            return test_data, network
         print("Training completed and model saved.")
+        
 
     def DBN_evaluate(network, test_data_name="test_data.csv", model_name="trained_model.pkl", variables_to_add = ['Time_Helpful_SignSeen', 'Num_intersection']):
         """
@@ -217,8 +229,7 @@ class qzy():
         classes = [0, 1]
 
         available_vars = [var for var in variables_to_add if var in test_data.columns]
-        print("avaliable vars")
-        print(available_vars)
+        print(f"avaliable vars: {available_vars}")
         print("DBN_evaluate prediction in progress:")
         for i in range(len(test_data) - 1):
             current_row = test_data.iloc[i]
@@ -232,7 +243,7 @@ class qzy():
             actual_value = test_data.iloc[i + 1]['uncertain']
             predictions.append(most_confident_prediction)
             true_labels.append(actual_value)
-            print(str(i+1) + "/" + str(len(test_data)), end = "\r")
+            # print(str(i+1) + "/" + str(len(test_data)), end = "\r")
     
         print("DBN_evaluate prediction done")
         accuracy = accuracy_score(true_labels, predictions)
@@ -273,8 +284,7 @@ class qzy():
         true_labels = []
         classes = [0, 1]
         available_vars = [var for var in variables_to_add if var in test_data.columns]
-        print("avaliable vars")
-        print(available_vars)
+        print(f"avaliable vars:{available_vars}")
         print("DBN_acc prediction in progress:")
         for i in range(len(test_data) - 1):
             current_row = test_data.iloc[i]
@@ -288,12 +298,15 @@ class qzy():
             actual_value = test_data.iloc[i + 1]['uncertain']
             predictions.append(most_confident_prediction)
             true_labels.append(actual_value)
-            print(str(i+1) + "/" + str(len(test_data)), end = "\r")
+            # print(str(i+1) + "/" + str(len(test_data)), end = "\r")
         
         print("DBN_evaluate prediction done")
         return(accuracy_score(true_labels, predictions))
         
-    def DBN_acc_and_sensitivity(network, test_data_name="test_data.csv", model_name="trained_model.pkl"):
+    def DBN_acc_and_sensitivity(network, test_data_name = "test_data.csv", model_name = "trained_model.pkl", variables_to_add = ['Time_Helpful_SignSeen', 'Num_intersection']):
+        """
+        Returns the accuracy and sensitivity based on reading data.
+        """
         with open(model_name, "rb") as file:
             dbn = pickle.load(file)
         test_data = pd.read_csv(test_data_name)
@@ -301,18 +314,22 @@ class qzy():
         predictions = []
         true_labels = []
         classes = [0, 1]
-
+        available_vars = [var for var in variables_to_add if var in test_data.columns]
+        print(f"avaliable vars:{available_vars}")
+        print("DBN_acc_and_sensitivity prediction in progress:")
         for i in range(len(test_data) - 1):
             current_row = test_data.iloc[i]
-            evidence = {
-                ('Time_Helpful_SignSeen', 0): current_row['Time_Helpful_SignSeen'],
-                ('Num_intersection', 0): current_row['Num_intersection']
-            }
+            evidence = {}
+            for var in variables_to_add:
+                if var in current_row:
+                    evidence[(var, 0)] = current_row[var]
+            # print(evidence)
             prediction = dbn_inference.forward_inference([('uncertain', 1)], evidence=evidence)
             most_confident_prediction = np.argmax(prediction[('uncertain', 1)].values)
             actual_value = test_data.iloc[i + 1]['uncertain']
             predictions.append(most_confident_prediction)
             true_labels.append(actual_value)
+            # print(str(i+1) + "/" + str(len(test_data)), end = "\r")
 
         accuracy = accuracy_score(true_labels, predictions)
 
@@ -324,28 +341,84 @@ class qzy():
 
         return accuracy, sensitivity
 
-    def DBN_T1(network, predictors=['Time_Helpful_SignSeen', 'Num_intersection'], number_of_iterations = 20, variables=['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain'], bins=[4,3,3]):
+    def DBN_fast_acc_and_sensitivity(network, test_data, model, variables_to_add = ['Time_Helpful_SignSeen', 'Num_intersection']):
+        """
+        Fast Methods does not read from permenant files, it accepts variables passed in.
+        """
+        dbn_inference = DBNInference(network)
+        predictions = []
+        true_labels = []
+        classes = [0, 1]
+        available_vars = [var for var in variables_to_add if var in test_data.columns]
+        print(f"avaliable vars:{available_vars}")
+        print("DBN_fast_acc_and_sensitivity prediction in progress:")
+        for i in range(len(test_data) - 1):
+            current_row = test_data.iloc[i]
+            evidence = {}
+            for var in variables_to_add:
+                if var in current_row:
+                    evidence[(var, 0)] = current_row[var]
+            # print(evidence)
+            prediction = dbn_inference.forward_inference([('uncertain', 1)], evidence=evidence)
+            most_confident_prediction = np.argmax(prediction[('uncertain', 1)].values)
+            actual_value = test_data.iloc[i + 1]['uncertain']
+            predictions.append(most_confident_prediction)
+            true_labels.append(actual_value)
+            # print(str(i+1) + "/" + str(len(test_data)), end = "\r")
+
+        accuracy = accuracy_score(true_labels, predictions)
+
+        cm = confusion_matrix(true_labels, predictions)
+        TP = cm[1, 1]
+        FN = cm[1, 0]
+
+        sensitivity = TP / (TP + FN) if (TP + FN) > 0 else 0
+
+        return accuracy, sensitivity
+
+    def DBN_T1(network, number_of_iterations = 20, predictors=['Time_Helpful_SignSeen', 'Num_intersection'], variables=['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain'], bins=[4,3,3]):
         i = 1001
         accs = []
+        senses = []
+        sums = []
         maxn = 1000+number_of_iterations
         highest_accuracy = -999
-        highest_seed = -999
+        highest_sensitivity = -999
+        highest_sum = -999
+        highest_accuracy_seed = -999
+        highest_sensitivity_seed = -999
+        highest_sum_seed = -999
+        
         while i <= maxn:
             network.clear()
             network = qzy.DBN_ini(predictors)
-            qzy.DBN_train(network, columns=variables, data_name="Agent_UpdatedTra_Simulation.csv", bins = [4, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3], shuffled=True, seed=i)
+            test_data, network = qzy.DBN_train(network, columns=variables, data_name="Agent_UpdatedTra_Simulation.csv", bins = bins, shuffled=True, seed=i, fast=True)
             print(str(i-1000) + "/" + str(number_of_iterations))
-            accuracy = qzy.DBN_acc(network, variables_to_add = predictors)
+            accuracy, sensitivity = qzy.DBN_fast_acc_and_sensitivity(network, test_data, network, variables_to_add = predictors)
+            print(f"Accuracy: {accuracy} Sensitivity: {sensitivity} Seed: {i}")
             if (accuracy > highest_accuracy):
                 highest_accuracy = accuracy
-                highest_seed = i
+                highest_accuracy_seed = i
+
+            if (sensitivity > highest_sensitivity):
+                highest_sensitivity = sensitivity
+                highest_sensitivity_seed = i
+
+            if (accuracy+sensitivity > highest_sum):
+                highest_sum = sensitivity+accuracy
+                highest_sum_seed = i
+
             accs.append(accuracy)
+            senses.append(sensitivity)
+            sums.append(accuracy+sensitivity)
             i += 1
 
+        print(f"starting with seed 1001 and end with seed {i}")
         print(f"highest accuracy: {highest_accuracy}")
-        print(f"seed with highest accuracy: {highest_seed}")
-        print(accs)
+        print(f"seed with highest accuracy: {highest_accuracy_seed}")
         qzy.plot_normal_distribution(accs)
+        qzy.plot_normal_distribution(sensitivity)
+        qzy.plot_normal_distribution(sum)
 
     def DBN_T2(network, data_name="Agent_UpdatedTra_Simulation.csv", seed=123):
         """
@@ -395,37 +468,60 @@ class qzy():
         print(f"The standard deviation of T2 is: {np.std(accuracies)}")
 
 
-    def DBN_hyper(network, data_name="Agent_UpdatedTra_Simulation.csv", columns=['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain', 'participant'], ran = 11):
-        best_accuracy = 0
-        best_combination = None
-        num_bins_uncertain = 3
-        dbn = network
-        # Iterate over possible bin numbers for each feature with a leap of 5
-        for num_bins_Time_Helpful_SignSeen in range(2, ran):
-            for num_bins_Num_intersection in range(2, ran):
-                dbn.clear()
-                dbn = DBN()
-                dbn.add_edges_from([
-                    (('Num_intersection', 0), ('uncertain', 0)),
-                    (('Time_Helpful_SignSeen', 0), ('uncertain', 0)),
-                    # participant removed
-                    (('uncertain', 0), ('uncertain', 1)),
-                    (('Num_intersection', 1), ('uncertain', 1)),
-                    (('Time_Helpful_SignSeen', 1), ('uncertain', 1))
-                    # participant 1 removed
-                ])
-                bins = [num_bins_Time_Helpful_SignSeen, num_bins_Num_intersection, num_bins_uncertain]
-                print(bins)
-                # Train the model with the current bin configuration
-                qzy.DBN_train(dbn, columns, bins, data_name)
-                # Evaluate the model
-                accuracy = qzy.DBN_acc(dbn)
-                # Update best combination if current configuration is better
-                if accuracy > best_accuracy:
-                    best_accuracy = accuracy
-                    best_combination = bins
-                print("done")
-        print(f"Best bin combination: {best_combination} with accuracy: {best_accuracy}")
+    def DBN_hyper(network, data_name="Agent_UpdatedTra_Simulation.csv", columns=['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain', 'participant'], predictors=['Time_Helpful_SignSeen', 'Num_intersection'], bins=[4,3,3], ran = 11, seed=1056):
+        start_time = time.time()
+
+        best_sum = 0
+        best_accuracy=0
+        best_sensitivity=0
+        accuracy = 0
+        sensitivity = 0
+        best_sum_combination = None
+        best_accuracy_combination = None
+        best_sensitivity_combination = None
+        
+        local_network = qzy.DBN_ini(predictors)
+        # Exclude 'uncertain' and 'participant' from the variable bin range generation
+        variable_columns = [col for col in columns if col not in ['uncertain', 'participant']]
+
+        # Generate all possible bin combinations within the range for each variable column
+        all_bin_combinations = list(itertools.product(*(range(3, ran+1) for _ in variable_columns)))
+
+        for bin_combination in all_bin_combinations:
+            local_network.clear()
+            local_network = qzy.DBN_ini(predictors)
+            # Construct the full bin list including the fixed bin count for 'uncertain' as 3
+            full_bins = list(bin_combination) + [3]  # Appending fixed bin count for 'uncertain'
+            
+            print("Training with bins:", full_bins)
+            qzy.DBN_train(local_network, columns=columns, data_name=data_name, bins=full_bins, shuffled=True, seed=seed)
+            
+            accuracy, sensitivity = qzy.DBN_acc_and_sensitivity(local_network, variables_to_add=predictors)
+            if accuracy+sensitivity > best_sum:
+                best_sum = accuracy+sensitivity
+                best_sum_combination = full_bins  # Store the full bin combination including 'uncertain'
+
+            if accuracy > best_accuracy:
+                best_accuracy = accuracy
+                best_accuracy_combination = full_bins
+
+            if sensitivity > best_sensitivity:
+                best_sensitivity = sensitivity
+                best_sensitivity_combination = full_bins
+            
+            print("Iteration done with bins:", full_bins, "Accuracy:", accuracy, "Sensitivity:", sensitivity)
+        
+        # Ensure the best combination is displayed correctly
+        if best_sum_combination is not None:
+            print(f"Best sum bin combination: {best_sum_combination} with sum: {best_sum}")
+            print(f"Best accuracy bin combination: {best_accuracy_combination} with accuracy: {best_accuracy}")
+            print(f"Best sensitivity bin combination: {best_sensitivity_combination} with sensitivity: {best_sensitivity}")
+        else:
+            print("No best combination found.")
+
+        end_time = time.time()
+        print(f"Time consumed: {(end_time - start_time) / 3600:.4f} hours")
+
 
     def DBN_T3(network, columns = ['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain', 'participant'], bins = [4, 3, 3],  data_name = "Agent_UpdatedTra_Simulation.csv", shuffled = False, seed = 123, model_name = "trained_model.pkl"):
         """
