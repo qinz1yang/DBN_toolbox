@@ -29,6 +29,10 @@ from sklearn.ensemble import RandomForestClassifier
 
 import itertools
 
+import threading
+from queue import Queue
+
+
 class qzy():
     """
     qzy's tools for training and evaluating DBN networks
@@ -91,7 +95,7 @@ class qzy():
         plt.plot(xs, ys, label=f'{label} Normal Dist.', color=color)
         plt.axvline(x=mu, color=color, linestyle='--', label=f'{label} Mean: {mu:.4f} SD: {std:.4f}')
 
-    def plot_normal_distribution(data):
+    def plot_normal_distribution(data, name="given model"):
         """
         Method to plot normal distribution based on given data
         Parameters
@@ -100,6 +104,7 @@ class qzy():
         data = np.array(data)
         median = np.median(data)
         sd = np.std(data)
+        print(f"Statistics for {name}: ")
         print(f"Median: {median}")
         print(f"Standard Deviation: {sd}")
         plt.figure(figsize=(10, 6))
@@ -111,11 +116,11 @@ class qzy():
         plt.axvline(x=median-sd, color='g', linestyle=':', label=f"Median - 1 SD({sd:.4f})")
         plt.axvline(x=median+sd, color='g', linestyle=':', label=f"Median + 1 SD({sd:.4f})")
     
-        plt.title('Normal Distribution of Data')
+        plt.title(f'Normal Distribution of {name} Data')
         plt.xlabel('Data')
         plt.ylabel('Density')
         plt.legend()
-        plt.savefig('normal_distribution.png')
+        plt.savefig(f'{name}_normal_distribution.png')
 
     def plot_ground_truth(true_labels, predictions, model_name):
         plt.figure(figsize=(100, 6))
@@ -127,7 +132,7 @@ class qzy():
             # else:
             #     plt.scatter(i, true, color='blue', label='Ground Truth' if i == 0 else "")
             # print(i)
-            # print(str(i+1) + "/" + str(len(true_labels)), end = "\r")
+            print(str(i+1) + "/" + str(len(true_labels)), end = "\r")
 
         print("Plot_ground_truth done")
         plt.title('Ground Truth red')
@@ -210,7 +215,7 @@ class qzy():
         print("Training completed and model saved.")
         
 
-    def DBN_evaluate(network, test_data_name="test_data.csv", model_name="trained_model.pkl", variables_to_add = ['Time_Helpful_SignSeen', 'Num_intersection']):
+    def DBN_evaluate(network=None, test_data=None, test_data_name="test_data.csv", model_name="trained_model.pkl", variables_to_add = ['Time_Helpful_SignSeen', 'Num_intersection']):
         """
         Method to evaluate the DBN model based on test data given.
         Parameters:
@@ -219,43 +224,51 @@ class qzy():
         - model name, default = "trained_model.pkl": name of trained model
         """
         confusion_matrix_filename = f"{model_name}_comfusion_matrix.png"
-
-        with open(model_name, "rb") as file:
-            dbn = pickle.load(file)
-        test_data = pd.read_csv(test_data_name)
-        dbn_inference = DBNInference(dbn)
-        predictions = []
-        true_labels = []
         classes = [0, 1]
 
-        available_vars = [var for var in variables_to_add if var in test_data.columns]
-        print(f"avaliable vars: {available_vars}")
-        print("DBN_evaluate prediction in progress:")
-        for i in range(len(test_data) - 1):
-            current_row = test_data.iloc[i]
+        if(network==None):
+            with open(model_name, "rb") as file:
+                dbn = pickle.load(file)
+        else:
+            dbn = network
+
+        if(test_data is None):
+            local_data = pd.read_csv(test_data_name)
+        else:
+            local_data = test_data
+
+        
+        local_variables = variables_to_add
+        dbn_inference = DBNInference(dbn)
+        available_vars = [var for var in local_variables if var in local_data.columns]
+        print(f"available vars:{available_vars}")
+        print("DBN_fast_acc_and_sensitivity prediction in progress:")
+        
+        # Pre-extract actual values to avoid repeated slicing
+        actual_values = local_data['uncertain'].iloc[1:].values
+        
+        predictions = []
+        for i, (_, current_row) in enumerate(local_data.iloc[:-1].iterrows()):
             evidence = {}
-            for var in variables_to_add:
+            for var in local_variables:
                 if var in current_row:
+                    # Ensure each key in 'evidence' is a tuple of (variable_name, time_slice)
                     evidence[(var, 0)] = current_row[var]
-            # print(evidence)
             prediction = dbn_inference.forward_inference([('uncertain', 1)], evidence=evidence)
             most_confident_prediction = np.argmax(prediction[('uncertain', 1)].values)
-            actual_value = test_data.iloc[i + 1]['uncertain']
             predictions.append(most_confident_prediction)
-            true_labels.append(actual_value)
-            # print(str(i+1) + "/" + str(len(test_data)), end = "\r")
     
         print("DBN_evaluate prediction done")
-        accuracy = accuracy_score(true_labels, predictions)
-        precision = precision_score(true_labels, predictions, labels=classes, average='weighted')
-        recall = recall_score(true_labels, predictions, labels=classes, average='weighted')
-        f1 = f1_score(true_labels, predictions, labels=classes, average='weighted')
+        accuracy = accuracy_score(actual_values, predictions)
+        precision = precision_score(actual_values, predictions, labels=classes, average='weighted')
+        recall = recall_score(actual_values, predictions, labels=classes, average='weighted')
+        f1 = f1_score(actual_values, predictions, labels=classes, average='weighted')
         print(f"Accuracy: {accuracy}")
         print(f"Precision: {precision}")
         print(f"Recall: {recall}")
         print(f"F1 Score: {f1}")
-        qzy.plot_confusion_matrix(true_labels, predictions, classes, model_name)
-        qzy.plot_ground_truth(true_labels, predictions, model_name)
+        qzy.plot_confusion_matrix(actual_values, predictions, classes, model_name)
+        qzy.plot_ground_truth(actual_values, predictions, model_name)
 
         
         html_filename = f'{model_name}_results.html'
@@ -341,42 +354,43 @@ class qzy():
 
         return accuracy, sensitivity
 
-    def DBN_fast_acc_and_sensitivity(network, test_data, model, variables_to_add = ['Time_Helpful_SignSeen', 'Num_intersection']):
+    def DBN_fast_acc_and_sensitivity(network, test_data, variables_to_add = ['Time_Helpful_SignSeen', 'Num_intersection']):
         """
         Fast Methods does not read from permenant files, it accepts variables passed in.
         """
-        dbn_inference = DBNInference(network)
-        predictions = []
-        true_labels = []
-        classes = [0, 1]
-        available_vars = [var for var in variables_to_add if var in test_data.columns]
-        print(f"avaliable vars:{available_vars}")
+
+        local_network = network
+        local_data = test_data
+        local_variables = variables_to_add
+        dbn_inference = DBNInference(local_network)
+        available_vars = [var for var in local_variables if var in local_data.columns]
+        print(f"available vars:{available_vars}")
         print("DBN_fast_acc_and_sensitivity prediction in progress:")
-        for i in range(len(test_data) - 1):
-            current_row = test_data.iloc[i]
+        
+        # Pre-extract actual values to avoid repeated slicing
+        actual_values = local_data['uncertain'].iloc[1:].values
+
+        predictions = []
+        for i, (_, current_row) in enumerate(local_data.iloc[:-1].iterrows()):
+
             evidence = {}
-            for var in variables_to_add:
+            for var in local_variables:
                 if var in current_row:
+                    # Ensure each key in 'evidence' is a tuple of (variable_name, time_slice)
                     evidence[(var, 0)] = current_row[var]
-            # print(evidence)
             prediction = dbn_inference.forward_inference([('uncertain', 1)], evidence=evidence)
             most_confident_prediction = np.argmax(prediction[('uncertain', 1)].values)
-            actual_value = test_data.iloc[i + 1]['uncertain']
             predictions.append(most_confident_prediction)
-            true_labels.append(actual_value)
-            # print(str(i+1) + "/" + str(len(test_data)), end = "\r")
+            if((i % 1000) == 0):
+                print(f"{i} / {len(local_data-1)}")
 
-        accuracy = accuracy_score(true_labels, predictions)
-
-        cm = confusion_matrix(true_labels, predictions)
-        TP = cm[1, 1]
-        FN = cm[1, 0]
-
-        sensitivity = TP / (TP + FN) if (TP + FN) > 0 else 0
+        accuracy = accuracy_score(actual_values, predictions)
+        sensitivity = recall_score(actual_values, predictions)  # Sensitivity is equivalent to recall
 
         return accuracy, sensitivity
 
     def DBN_T1(network, number_of_iterations = 20, predictors=['Time_Helpful_SignSeen', 'Num_intersection'], variables=['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain'], bins=[4,3,3]):
+        start_time = time.time()
         i = 1001
         accs = []
         senses = []
@@ -394,7 +408,7 @@ class qzy():
             network = qzy.DBN_ini(predictors)
             test_data, network = qzy.DBN_train(network, columns=variables, data_name="Agent_UpdatedTra_Simulation.csv", bins = bins, shuffled=True, seed=i, fast=True)
             print(str(i-1000) + "/" + str(number_of_iterations))
-            accuracy, sensitivity = qzy.DBN_fast_acc_and_sensitivity(network, test_data, network, variables_to_add = predictors)
+            accuracy, sensitivity = qzy.DBN_fast_acc_and_sensitivity(network, test_data, variables_to_add = predictors)
             print(f"Accuracy: {accuracy} Sensitivity: {sensitivity} Seed: {i}")
             if (accuracy > highest_accuracy):
                 highest_accuracy = accuracy
@@ -417,8 +431,87 @@ class qzy():
         print(f"highest accuracy: {highest_accuracy}")
         print(f"seed with highest accuracy: {highest_accuracy_seed}")
         qzy.plot_normal_distribution(accs)
-        qzy.plot_normal_distribution(sensitivity)
-        qzy.plot_normal_distribution(sum)
+        qzy.plot_normal_distribution(senses)
+        qzy.plot_normal_distribution(sums)
+
+        end_time = time.time()
+        print(f"Time consumed: {(end_time - start_time) / 3600:.4f} hours")
+
+    def DBN_T1_worker(start_seed, end_seed, network_template, predictors, variables, bins, results_queue):
+        local_network = network_template.copy()
+        local_predictors = predictors
+        local_variables = variables
+        for i in range(start_seed, end_seed):
+            local_network.clear()
+            local_network = qzy.DBN_ini(local_predictors)
+            print(f"{i-start_seed+1} / {end_seed-start_seed}")
+            test_data, local_network = qzy.DBN_train(local_network, columns=local_variables, data_name="Agent_UpdatedTra_Simulation.csv", bins=bins, shuffled=True, seed=i, fast=True)
+            accuracy, sensitivity = qzy.DBN_fast_acc_and_sensitivity(local_network, test_data, variables_to_add=local_predictors)
+            results_queue.put({
+                'seed': i,
+                'accuracy': accuracy,
+                'sensitivity': sensitivity,
+                'sum': accuracy + sensitivity
+            })
+
+    def DBN_T1_multithreaded(network, number_of_iterations=20, predictors=['Time_Helpful_SignSeen', 'Num_intersection'], variables=['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain'], bins=[4,3,3], num_threads=4):
+        start_time = time.time()
+
+        threads = []
+        results_queue = Queue()
+        
+        accs = []
+        senses = []
+        sums = []
+
+        iterations_per_thread = number_of_iterations // num_threads
+        for t in range(num_threads):
+            local_network = network
+            start_seed = 1001 + t * iterations_per_thread
+            if t == num_threads - 1:
+                end_seed = 1001 + number_of_iterations
+            else:
+                end_seed = start_seed + iterations_per_thread
+            thread = threading.Thread(target=qzy.DBN_T1_worker, args=(start_seed, end_seed, local_network, predictors, variables, bins, results_queue))
+            threads.append(thread)
+            thread.start()
+        
+        for thread in threads:
+            thread.join()
+
+        highest_accuracy = -999
+        highest_sensitivity = -999
+        highest_sum = -999
+        highest_accuracy_seed = -999
+        highest_sensitivity_seed = -999
+        highest_sum_seed = -999
+
+        while not results_queue.empty():
+            result = results_queue.get()
+            if result['accuracy'] > highest_accuracy:
+                highest_accuracy = result['accuracy']
+                highest_accuracy_seed = result['seed']
+            if result['sensitivity'] > highest_sensitivity:
+                highest_sensitivity = result['sensitivity']
+                highest_sensitivity_seed = result['seed']
+            if result['sum'] > highest_sum:
+                highest_sum = result['sum']
+                highest_sum_seed = result['seed']
+
+            accs.append(result['accuracy'])
+            senses.append(result['sensitivity'])
+            sums.append(result['sum'])
+
+        print(f"Highest Accuracy: {highest_accuracy}, Seed: {highest_accuracy_seed}")
+        print(f"Highest Sensitivity: {highest_sensitivity}, Seed: {highest_sensitivity_seed}")
+        print(f"Highest Sum: {highest_sum}, Seed: {highest_sum_seed}")
+
+        qzy.plot_normal_distribution(accs, name="accuracies")
+        qzy.plot_normal_distribution(senses, name="sensitivity")
+        qzy.plot_normal_distribution(sums, name="sums")
+
+        end_time = time.time()
+        print(f"Time consumed: {(end_time - start_time) / 3600:.6f} hours")
 
     def DBN_T2(network, data_name="Agent_UpdatedTra_Simulation.csv", seed=123):
         """
@@ -768,3 +861,57 @@ class qzy():
         plt.ylabel('Probability Density')
         plt.legend()
         plt.savefig("Compare_sensitivity.png")
+
+    def DBN_train_and_evaluate_by_task(network, data_name="Agent_UpdatedTra_Simulation.csv", columns=['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain', 'task'], predictors=['Time_Helpful_SignSeen', 'Num_intersection'], bins=[4, 3, 3], shuffled=True, seed=123, model_name="trained_model.pkl"):
+        test_data_directory = "test_data_by_participant_and_task"
+        os.makedirs(test_data_directory, exist_ok=True)
+        
+        np.random.seed(seed)
+        local_columns = columns
+        local_columns.append('task')
+        data = qzy.read_data(data_name, local_columns, bins)
+
+        evaluation_results = []
+
+        if (shuffled == True):
+            np.random.seed(seed)
+            groups = [df for _, df in data.groupby('participant')]
+            np.random.shuffle(groups)
+            shuffled_data = pd.concat(groups).reset_index(drop=True)
+            split_index = int(len(shuffled_data) * 0.8)
+            train_data = shuffled_data[:split_index]
+            test_data = shuffled_data[split_index:]
+            train_data = train_data.drop(columns=['participant'])
+            train_data = train_data.drop(columns=['task'])
+            data_t0 = train_data.rename(columns={col: (col, 0) for col in train_data.columns})
+            data_t1 = train_data.shift(-1).rename(columns={col: (col, 1) for col in train_data.columns})
+            complete_data = pd.concat([data_t0, data_t1], axis=1).dropna()
+        else:
+            np.random.seed(seed)
+            shuffled_data = data
+            split_index = int(len(shuffled_data) * 0.8)
+            train_data = shuffled_data[:split_index]
+            test_data = shuffled_data[split_index:]
+            data_t0 = train_data.rename(columns={col: (col, 0) for col in train_data.columns})
+            data_t1 = train_data.shift(-1).rename(columns={col: (col, 1) for col in train_data.columns})
+            complete_data = pd.concat([data_t0, data_t1], axis=1).dropna()
+
+        network.fit(complete_data, estimator='MLE')
+
+        for (participant, task), group in test_data.groupby(['participant', 'task']):
+            group = group.drop(columns=['participant'])
+            group = group.drop(columns=['task'])
+            filename = os.path.join(test_data_directory, f"participant_{participant}_task_{task}.csv")
+            group.to_csv(filename, index=False)
+            accuracy, sensitivity = qzy.DBN_fast_acc_and_sensitivity(network, group, variables_to_add=predictors)
+            evaluation_results.append([seed, participant, task, accuracy, sensitivity])
+
+        results_df = pd.DataFrame(evaluation_results, columns=['Seed', 'Participant', 'Task', 'Accuracy', 'Sensitivity'])
+        results_df.to_csv("task_evaluation_results.csv", index=False)
+
+        train_data.to_csv("train_data.csv", index=False)
+
+        with open(model_name, "wb") as file:
+            pickle.dump(network, file, protocol=pickle.HIGHEST_PROTOCOL)
+        
+
