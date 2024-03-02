@@ -1,22 +1,34 @@
+import multiprocessing
 from DBN_toolbox import qzy
 
-variables = ['Num_intersection', 'Time_Helpful_SignSeen', 'Circularity', 'Occlusivity', 'Elongation', 'Drift Angle','Visible_All_Sign', 'Visible_Helpful_Sign', 'Cloest_Helpful_Dist','Jagged_360', 'sbsod', 'age', 'uncertain']
-predictors = ['Num_intersection', 'Time_Helpful_SignSeen', 'Circularity', 'Occlusivity', 'Elongation', 'Drift Angle','Visible_All_Sign', 'Visible_Helpful_Sign', 'Cloest_Helpful_Dist','Jagged_360', 'sbsod', 'age']
+cores = multiprocessing.cpu_count()
+print(f"Core number: {cores}")
+
+variables = ['Occlusivity', 'Visible_Helpful_Sign', 'Time_Helpful_SignSeen', 'Num_intersection', 'group', 'sbsod', 'sa', 'mt', 'age', 'uncertain']
+predictors = ['Occlusivity', 'Visible_Helpful_Sign', 'Time_Helpful_SignSeen', 'Num_intersection', 'group', 'sbsod', 'sa', 'mt', 'age']
+local_bins = [3, 5, 5, 3, 4, 3, 4, 5, 3, 3]
 
 network = qzy.DBN_ini(predictors)
 
-# # T0
-# qzy.DBN_train(network, columns=variables, data_name="Agent_UpdatedTra_Simulation.csv", bins = [4, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3], shuffled=True, seed=1056)
-# qzy.DBN_evaluate(network, variables_to_add = predictors)
+# # # T0
+# test_data, network = qzy.DBN_train(network, columns=variables, data_name="Agent_UpdatedTra_Simulation.csv", bins = local_bins, shuffled=True, seed=3524, fast=True)
+# qzy.DBN_evaluate(network=network, test_data=test_data, variables_to_add=predictors)
+
+# # fast
+# test_data, network = qzy.DBN_train(network, columns=variables, data_name="Agent_UpdatedTra_Simulation.csv", bins = local_bins, shuffled=True, seed=1097, fast=True)
+# print(qzy.DBN_fast_acc_and_sensitivity(network, test_data, variables_to_add=predictors))
 
 # # T1
-qzy.DBN_T1(network, predictors=predictors, number_of_iterations=5, variables=variables)
+# qzy.DBN_T1(network, predictors=predictors, number_of_iterations=8, variables=variables, bins=local_bins)
+
+# # T1_multithreaded
+# qzy.DBN_T1_multithreaded(network, number_of_iterations=100, num_threads=cores, predictors=predictors, variables=variables, bins=local_bins)
 
 # T2
-# qzy.DBN_T2(dbn, "Agent_UpdatedTra_Simulation.csv", 123)
+# qzy.DBN_T2(network, "Agent_UpdatedTra_Simulation.csv", 123)
 
 # # Hyperdata
-# qzy.DBN_hyper(dbn, ran = 11)
+# qzy.DBN_hyper(network, columns=variables, predictors=predictors, ran = 5, seed=3524)
 
 # # T3
 # qzy.DBN_T3(network=dbn, data_name="Agent_UpdatedTra_Simulation.csv",bins = [4, 3, 3], shuffled=True, seed=1021)
@@ -41,3 +53,6 @@ qzy.DBN_T1(network, predictors=predictors, number_of_iterations=5, variables=var
 
 # # Compare models
 # qzy.compare_models()
+
+# By task
+qzy.DBN_train_and_evaluate_by_task(network, columns=variables, data_name="Agent_UpdatedTra_Simulation.csv",predictors=predictors, bins = local_bins, seed=3524)
