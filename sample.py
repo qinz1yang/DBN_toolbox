@@ -4,15 +4,19 @@ from DBN_toolbox import qzy
 cores = multiprocessing.cpu_count()
 print(f"Core number: {cores}")
 
-variables = ['Occlusivity', 'Visible_Helpful_Sign', 'Time_Helpful_SignSeen', 'Num_intersection', 'group', 'sbsod', 'sa', 'mt', 'age', 'uncertain']
-predictors = ['Occlusivity', 'Visible_Helpful_Sign', 'Time_Helpful_SignSeen', 'Num_intersection', 'group', 'sbsod', 'sa', 'mt', 'age']
-local_bins = [3, 5, 5, 3, 4, 3, 4, 5, 3, 3]
+# variables = ['Occlusivity', 'Visible_Helpful_Sign', 'Time_Helpful_SignSeen', 'Num_intersection', 'group', 'sbsod', 'sa', 'mt', 'age', 'uncertain']
+# predictors = ['Occlusivity', 'Visible_Helpful_Sign', 'Time_Helpful_SignSeen', 'Num_intersection', 'group', 'sbsod', 'sa', 'mt', 'age']
+# local_bins = [3, 5, 5, 3, 4, 3, 4, 5, 3, 3]
+
+variables = ['Occlusivity', 'Time_Helpful_SignSeen', 'group', 'mt', 'age', 'uncertain']
+predictors = ['Occlusivity', 'Time_Helpful_SignSeen', 'group', 'mt', 'age']
+local_bins = [3, 5, 4, 5, 3, 3]
 
 network = qzy.DBN_ini(predictors)
 
-# # # T0
-# test_data, network = qzy.DBN_train(network, columns=variables, data_name="Agent_UpdatedTra_Simulation.csv", bins = local_bins, shuffled=True, seed=3524, fast=True)
-# qzy.DBN_evaluate(network=network, test_data=test_data, variables_to_add=predictors)
+# # T0
+test_data, network = qzy.DBN_train(network, columns=variables, data_name="Agent_UpdatedTra_Simulation.csv", bins = local_bins, shuffled=True, seed=3524, fast=True)
+qzy.DBN_evaluate(network=network, test_data=test_data, variables_to_add=predictors)
 
 # # fast
 # test_data, network = qzy.DBN_train(network, columns=variables, data_name="Agent_UpdatedTra_Simulation.csv", bins = local_bins, shuffled=True, seed=1097, fast=True)
@@ -54,5 +58,11 @@ network = qzy.DBN_ini(predictors)
 # # Compare models
 # qzy.compare_models()
 
-# By task
-qzy.DBN_train_and_evaluate_by_task(network, columns=variables, data_name="Agent_UpdatedTra_Simulation.csv",predictors=predictors, bins = local_bins, seed=3524)
+# # By task
+# qzy.DBN_train_and_evaluate_by_task(network, columns=variables, data_name="Agent_UpdatedTra_Simulation.csv",predictors=predictors, bins = local_bins, seed=3524)
+
+# #range
+# qzy.DBN_evaluate_over_seed_range(network=network, seed_start=1001, seed_end=1999, columns=variables, data_name="Agent_UpdatedTra_Simulation.csv", predictors=predictors, bins = local_bins)
+
+# # try combinations
+# print(qzy.DBN_predictor_impact(data_name="Agent_UpdatedTra_Simulation.csv", columns=variables, predictors=predictors, bins=local_bins, seed=3524))
