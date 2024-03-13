@@ -32,6 +32,9 @@ import itertools
 import threading
 from queue import Queue
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import copy
+
 
 class qzy():
     """
@@ -862,56 +865,120 @@ class qzy():
         plt.legend()
         plt.savefig("Compare_sensitivity.png")
 
-    def DBN_train_and_evaluate_by_task(network, data_name="Agent_UpdatedTra_Simulation.csv", columns=['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain', 'task'], predictors=['Time_Helpful_SignSeen', 'Num_intersection'], bins=[4, 3, 3], shuffled=True, seed=123, model_name="trained_model.pkl"):
-        test_data_directory = "test_data_by_participant_and_task"
+    def DBN_train_and_evaluate_by_task(network, data_name="Agent_UpdatedTra_Simulation.csv", columns=['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain', 'task'], predictors=['Time_Helpful_SignSeen', 'Num_intersection'], bins=[4, 3, 3], shuffled=True, model_name="trained_model.pkl", seed=123):
+        main_directory = "evaluation_results"
+        os.makedirs(main_directory, exist_ok=True)
+        test_data_directory = os.path.join(main_directory, f"seed_{seed}")
         os.makedirs(test_data_directory, exist_ok=True)
         
         np.random.seed(seed)
-        local_columns = columns
+        local_columns = columns.copy()  # Fix: Make a copy of the columns list to prevent modifying the input list
         local_columns.append('task')
         data = qzy.read_data(data_name, local_columns, bins)
 
         evaluation_results = []
 
-        if (shuffled == True):
+        if shuffled:
             np.random.seed(seed)
             groups = [df for _, df in data.groupby('participant')]
             np.random.shuffle(groups)
             shuffled_data = pd.concat(groups).reset_index(drop=True)
-            split_index = int(len(shuffled_data) * 0.8)
-            train_data = shuffled_data[:split_index]
-            test_data = shuffled_data[split_index:]
-            train_data = train_data.drop(columns=['participant'])
-            train_data = train_data.drop(columns=['task'])
-            data_t0 = train_data.rename(columns={col: (col, 0) for col in train_data.columns})
-            data_t1 = train_data.shift(-1).rename(columns={col: (col, 1) for col in train_data.columns})
-            complete_data = pd.concat([data_t0, data_t1], axis=1).dropna()
         else:
-            np.random.seed(seed)
             shuffled_data = data
-            split_index = int(len(shuffled_data) * 0.8)
-            train_data = shuffled_data[:split_index]
-            test_data = shuffled_data[split_index:]
-            data_t0 = train_data.rename(columns={col: (col, 0) for col in train_data.columns})
-            data_t1 = train_data.shift(-1).rename(columns={col: (col, 1) for col in train_data.columns})
-            complete_data = pd.concat([data_t0, data_t1], axis=1).dropna()
+        
+        split_index = int(len(shuffled_data) * 0.8)
+        train_data = shuffled_data.iloc[:split_index]
+        test_data = shuffled_data.iloc[split_index:]
+        train_data = train_data.drop(columns=['participant', 'task'])
+        data_t0 = train_data.rename(columns={col: (col, 0) for col in train_data.columns})
+        data_t1 = train_data.shift(-1).rename(columns={col: (col, 1) for col in train_data.columns})
+        complete_data = pd.concat([data_t0, data_t1], axis=1).dropna()
 
         network.fit(complete_data, estimator='MLE')
 
         for (participant, task), group in test_data.groupby(['participant', 'task']):
-            group = group.drop(columns=['participant'])
-            group = group.drop(columns=['task'])
+            group = group.drop(columns=['participant', 'task'])
             filename = os.path.join(test_data_directory, f"participant_{participant}_task_{task}.csv")
             group.to_csv(filename, index=False)
             accuracy, sensitivity = qzy.DBN_fast_acc_and_sensitivity(network, group, variables_to_add=predictors)
             evaluation_results.append([seed, participant, task, accuracy, sensitivity])
 
         results_df = pd.DataFrame(evaluation_results, columns=['Seed', 'Participant', 'Task', 'Accuracy', 'Sensitivity'])
-        results_df.to_csv("task_evaluation_results.csv", index=False)
 
-        train_data.to_csv("train_data.csv", index=False)
-
-        with open(model_name, "wb") as file:
-            pickle.dump(network, file, protocol=pickle.HIGHEST_PROTOCOL)
+        # # Save the trained model
+        # with open(model_name, "wb") as file:
+        #     pickle.dump(network, file, protocol=pickle.HIGHEST_PROTOCOL)
         
+        return results_df
+        
+    def DBN_evaluate_over_seed_range(network, seed_start, seed_end, **kwargs):
 
+        futures_with_seeds = []
+
+        with ThreadPoolExecutor() as executor:
+            for seed in range(seed_start, seed_end + 1):
+                local_network = copy.deepcopy(network)
+                future = executor.submit(qzy.DBN_train_and_evaluate_by_task, local_network, seed=seed, **kwargs)
+                futures_with_seeds.append((future, seed))
+
+        results_with_seeds = []
+        for future, seed in futures_with_seeds:
+            try:
+                result = future.result()
+                results_with_seeds.append((seed, result))
+            except Exception as exc:
+                print(f"An error occurred for seed {seed}: {exc}")
+
+        results_with_seeds.sort(key=lambda x: x[0])  # Sort by seed, which is the first element in each tuple
+
+        sorted_results = [result for _, result in results_with_seeds]
+
+        combined_results_df = pd.concat(sorted_results)
+        combined_results_df.to_csv("combined_evaluation_results.csv", index=False)
+
+        print("Done.")
+
+    def DBN_predictor_impact(data_name="Agent_UpdatedTra_Simulation.csv", columns=['Time_Helpful_SignSeen', 'Num_intersection', 'uncertain', 'participant'], predictors=['Time_Helpful_SignSeen', 'Num_intersection'], bins=[4, 3, 3], seed=123):
+        """
+        Evaluates the impact of each predictor on the DBN model by calculating the change in the sum of accuracy and sensitivity
+        when excluding each predictor one at a time.
+        
+        Parameters:
+        - data_name: CSV file containing the data.
+        - columns: List of all columns to be included in the model.
+        - predictors: List of predictor variables.
+        - bins: The bin counts for discretization of each variable.
+        - seed: Seed for random number generation, used in data shuffling.
+        """
+        impact_results = {}
+        dbn_baseline = qzy.DBN_ini(variables_to_add=predictors)
+        _, dbn_baseline = qzy.DBN_train(dbn_baseline, columns=columns, data_name=data_name, bins=bins, shuffled=True, seed=seed, fast=True)
+        baseline_accuracy, baseline_sensitivity = qzy.DBN_fast_acc_and_sensitivity(dbn_baseline, _, variables_to_add=predictors)
+        baseline_sum = baseline_accuracy + baseline_sensitivity
+
+        for predictor in predictors:
+            temp_predictors = [p for p in predictors if p != predictor]
+            dbn_modified = qzy.DBN_ini(variables_to_add=temp_predictors)
+            _, dbn_modified = qzy.DBN_train(dbn_modified, columns=columns, data_name=data_name, bins=bins, shuffled=True, seed=seed, fast=True)
+            modified_accuracy, modified_sensitivity = qzy.DBN_fast_acc_and_sensitivity(dbn_modified, _, variables_to_add=temp_predictors)
+            modified_sum = modified_accuracy + modified_sensitivity
+            impact = baseline_sum - modified_sum
+            impact_results[predictor] = impact
+
+        predictors = list(impact_results.keys())
+        impacts = list(impact_results.values())
+
+        plt.figure(figsize=(12, 8))
+        bars = plt.bar(predictors, impacts, color='skyblue')
+        plt.xlabel('Predictors')
+        plt.ylabel('Impact on Model Performance')
+        plt.title('Impact of Each Predictor on the DBN Model Performance')
+        plt.xticks(rotation=45, ha="right")
+
+        for bar in bars:
+            yval = bar.get_height()
+            plt.text(bar.get_x() + bar.get_width()/2.0, yval, f"{yval:.2f}", va='bottom', ha='center')
+
+        plt.tight_layout()
+        plt.savefig("impact_results.png")
+        return impact_results
