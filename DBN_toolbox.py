@@ -213,8 +213,7 @@ class qzy():
                 pickle.dump(network, file, protocol=pickle.HIGHEST_PROTOCOL)
             test_data.to_csv("test_data.csv", index=False)
             train_data.to_csv("train_data.csv", index=False)
-        else:
-            return test_data, network
+        return test_data, network
         print("Training completed and model saved.")
         
 
@@ -247,7 +246,6 @@ class qzy():
         print(f"available vars:{available_vars}")
         print("DBN_fast_acc_and_sensitivity prediction in progress:")
         
-        # Pre-extract actual values to avoid repeated slicing
         actual_values = local_data['uncertain'].iloc[1:].values
         
         predictions = []
@@ -255,7 +253,6 @@ class qzy():
             evidence = {}
             for var in local_variables:
                 if var in current_row:
-                    # Ensure each key in 'evidence' is a tuple of (variable_name, time_slice)
                     evidence[(var, 0)] = current_row[var]
             prediction = dbn_inference.forward_inference([('uncertain', 1)], evidence=evidence)
             most_confident_prediction = np.argmax(prediction[('uncertain', 1)].values)
@@ -370,7 +367,6 @@ class qzy():
         print(f"available vars:{available_vars}")
         print("DBN_fast_acc_and_sensitivity prediction in progress:")
         
-        # Pre-extract actual values to avoid repeated slicing
         actual_values = local_data['uncertain'].iloc[1:].values
 
         predictions = []
@@ -379,7 +375,6 @@ class qzy():
             evidence = {}
             for var in local_variables:
                 if var in current_row:
-                    # Ensure each key in 'evidence' is a tuple of (variable_name, time_slice)
                     evidence[(var, 0)] = current_row[var]
             prediction = dbn_inference.forward_inference([('uncertain', 1)], evidence=evidence)
             most_confident_prediction = np.argmax(prediction[('uncertain', 1)].values)
@@ -388,7 +383,7 @@ class qzy():
                 print(f"{i} / {len(local_data-1)}")
 
         accuracy = accuracy_score(actual_values, predictions)
-        sensitivity = recall_score(actual_values, predictions)  # Sensitivity is equivalent to recall
+        sensitivity = recall_score(actual_values, predictions) 
 
         return accuracy, sensitivity
 
