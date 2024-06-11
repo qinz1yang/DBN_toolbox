@@ -1,3 +1,4 @@
+# DBN_toolbox 
 The `DBN_toolbox` library facilitates the training and evaluation of Dynamic Bayesian Networks (DBNs) with a focus on handling time-series data and complex variable relationships. This documentation provides detailed guidance on how to utilize the library, including example usage for various functions.
 ### Installation
 Ensure Python is installed along with necessary packages: `pandas`, `pgmpy`, `numpy`, `matplotlib`, `scipy`, `pickle`, and `sklearn`. Install these using pip:
